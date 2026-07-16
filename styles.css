@@ -218,6 +218,67 @@ h1 {
   margin-bottom: 16px;
 }
 
+.about-block,
+.experience-block,
+.research-block,
+.contact-block {
+  margin-top: 16px;
+}
+
+.feature-grid,
+.contact-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.feature-card,
+.contact-card {
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+  border: 1px solid rgba(132, 240, 179, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.feature-card h3,
+.contact-card strong {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.check-list {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.check-list li {
+  position: relative;
+  padding-left: 28px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.check-list li::before {
+  content: "▣";
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--accent);
+}
+
+.contact-card span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
 .games-block {
   overflow: hidden;
 }
@@ -241,6 +302,12 @@ h1 {
   gap: 4px;
 }
 
+.snake-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .game-label {
   color: var(--muted);
   font-size: 0.78rem;
@@ -254,6 +321,10 @@ h1 {
 
 .snake-restart {
   min-width: 120px;
+}
+
+.snake-toggle {
+  min-width: 104px;
 }
 
 #snake-canvas {
@@ -332,6 +403,35 @@ h1 {
 @media (max-width: 900px) {
   .section-grid {
     grid-template-columns: 1fr;
+  }
+
+  .feature-grid,
+  .contact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .site-header {
+    padding: 14px 16px;
+  }
+
+  .section-grid,
+  .feature-grid,
+  .contact-grid {
+    gap: 14px;
+  }
+
+  .snake-toolbar {
+    align-items: stretch;
+  }
+
+  .snake-actions {
+    width: 100%;
+  }
+
+  .snake-actions .button {
+    flex: 1 1 0;
   }
 }
 

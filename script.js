@@ -18,21 +18,25 @@ if (navToggle && siteNav) {
 
 const snakeCanvas = document.getElementById('snake-canvas');
 const snakeScore = document.getElementById('snake-score');
+const snakeHighScore = document.getElementById('snake-high-score');
 const snakeStatus = document.getElementById('snake-status');
+const snakeToggle = document.getElementById('snake-toggle');
 const snakeRestart = document.getElementById('snake-restart');
 const touchButtons = document.querySelectorAll('.touch-pad button[data-dir]');
 
-if (snakeCanvas && snakeScore && snakeStatus && snakeRestart) {
+if (snakeCanvas && snakeScore && snakeHighScore && snakeStatus && snakeToggle && snakeRestart) {
   const ctx = snakeCanvas.getContext('2d');
   const gridSize = 24;
   const cellSize = snakeCanvas.width / gridSize;
   const speedMs = 120;
+  const storageKey = 'nullablenull-snake-high-score';
 
   let snake;
   let direction;
   let pendingDirection;
   let food;
   let score;
+  let highScore;
   let timerId;
   let started;
   let gameOver;
@@ -76,9 +80,11 @@ if (snakeCanvas && snakeScore && snakeStatus && snakeRestart) {
     score = 0;
     started = false;
     gameOver = false;
+    snakeToggle.textContent = 'Start';
     food = spawnFood();
     snakeScore.textContent = String(score);
     snakeStatus.textContent = 'Ready';
+    snakeHighScore.textContent = String(highScore);
     draw();
   }
 
@@ -86,18 +92,37 @@ if (snakeCanvas && snakeScore && snakeStatus && snakeRestart) {
     snakeStatus.textContent = value;
   }
 
-  function setDirection(next) {
-    if (!started && !gameOver) {
-      started = true;
-      setStatus('Playing');
-      startLoop();
+  function readHighScore() {
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      const parsed = Number.parseInt(raw || '0', 10);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    } catch {
+      return 0;
     }
+  }
 
+  function writeHighScore(value) {
+    highScore = Math.max(highScore, value);
+    snakeHighScore.textContent = String(highScore);
+
+    try {
+      window.localStorage.setItem(storageKey, String(highScore));
+    } catch {
+      // localStorage may be unavailable in restricted contexts.
+    }
+  }
+
+  function setDirection(next) {
     if (isOpposite(next, direction)) {
       return;
     }
 
     pendingDirection = next;
+
+    if (!started && !gameOver) {
+      startGame();
+    }
   }
 
   function move() {
@@ -112,27 +137,32 @@ if (snakeCanvas && snakeScore && snakeStatus && snakeRestart) {
       y: head.y + direction.y,
     };
 
+    const willEat = sameCell(nextHead, food);
+    const bodyToCheck = willEat ? snake : snake.slice(0, -1);
+
     const hitWall =
       nextHead.x < 0 ||
       nextHead.x >= gridSize ||
       nextHead.y < 0 ||
       nextHead.y >= gridSize;
 
-    const hitSelf = snake.some((segment) => sameCell(segment, nextHead));
+    const hitSelf = bodyToCheck.some((segment) => sameCell(segment, nextHead));
 
     if (hitWall || hitSelf) {
       gameOver = true;
       setStatus('Game Over');
       stopLoop();
+      snakeToggle.textContent = 'Start';
       draw();
       return;
     }
 
     snake.unshift(nextHead);
 
-    if (sameCell(nextHead, food)) {
+    if (willEat) {
       score += 1;
       snakeScore.textContent = String(score);
+      writeHighScore(score);
       food = spawnFood();
     } else {
       snake.pop();
@@ -207,6 +237,42 @@ if (snakeCanvas && snakeScore && snakeStatus && snakeRestart) {
     timerId = null;
   }
 
+  function startGame() {
+    if (gameOver) {
+      return;
+    }
+
+    started = true;
+    setStatus('Playing');
+    snakeToggle.textContent = 'Pause';
+    startLoop();
+  }
+
+  function pauseGame() {
+    if (!started || gameOver) {
+      return;
+    }
+
+    started = false;
+    stopLoop();
+    setStatus('Paused');
+    snakeToggle.textContent = 'Resume';
+  }
+
+  function toggleGame() {
+    if (gameOver) {
+      resetGame();
+      startGame();
+      return;
+    }
+
+    if (!started) {
+      startGame();
+    } else {
+      pauseGame();
+    }
+  }
+
   function restartGame() {
     stopLoop();
     resetGame();
@@ -274,7 +340,9 @@ if (snakeCanvas && snakeScore && snakeStatus && snakeRestart) {
   });
 
   snakeRestart.addEventListener('click', restartGame);
+  snakeToggle.addEventListener('click', toggleGame);
 
+  highScore = readHighScore();
+  snakeHighScore.textContent = String(highScore);
   resetGame();
-  startLoop();
 }
