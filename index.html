@@ -115,7 +115,7 @@
         <ul class="check-list">
           <li>서비스 안정화와 운영 자동화</li>
           <li>결제, 정산, 백오피스 흐름과 Samsung Wallet 부가 서비스 제공</li>
-          <li>보안과 성능을 함께 고려한 서버 구조</li>
+          <li>보안과 성능을 함께 고려한 서버 구조 [사람 확인 필요]</li>
         </ul>
       </section>
 
@@ -135,7 +135,7 @@
           </a>
           <div class="contact-card">
             <span>Email</span>
-            <strong>[사람 확인 필요]</strong>
+            <strong>N/A</strong>
           </div>
         </div>
       </section>
@@ -145,10 +145,6 @@
           <p class="eyebrow">Games</p>
           <h2>지렁이 게임</h2>
         </div>
-        <p>
-          slither.io처럼 부드럽고 빠른 느낌을 살린 지렁이 게임의 최소 버전입니다.
-          적 4개와 폭발 규칙은 다음 루프에서 추가합니다.
-        </p>
         <div class="snake-game" aria-label="지렁이 게임 영역">
           <div class="snake-toolbar">
             <div>
@@ -169,13 +165,84 @@
             </div>
           </div>
           <canvas id="snake-canvas" width="480" height="480" aria-label="Snake game board"></canvas>
-          <p class="game-hint">방향키 또는 WASD, 모바일에서는 스와이프나 방향 버튼으로 조작하세요.</p>
           <div class="touch-pad" aria-label="모바일 방향 버튼">
             <button type="button" data-dir="up">▲</button>
             <div class="touch-pad-middle">
               <button type="button" data-dir="left">◀</button>
               <button type="button" data-dir="down">▼</button>
               <button type="button" data-dir="right">▶</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="agar-arena" class="panel section-block game-variant">
+        <div class="section-heading">
+          <p class="eyebrow">IO Game 1</p>
+          <h2>Agar Arena</h2>
+        </div>
+        <div class="snake-game io-game" aria-label="Agar Arena game area">
+          <div class="snake-toolbar">
+            <div>
+              <span class="game-label">Score</span>
+              <strong id="agar-score">0</strong>
+            </div>
+            <div>
+              <span class="game-label">High Score</span>
+              <strong id="agar-high-score">0</strong>
+            </div>
+            <div>
+              <span class="game-label">Status</span>
+              <strong id="agar-status">Ready</strong>
+            </div>
+            <div class="snake-actions">
+              <button class="button secondary agar-toggle" type="button" id="agar-toggle">Start</button>
+              <button class="button secondary agar-restart" type="button" id="agar-restart">Restart</button>
+            </div>
+          </div>
+          <canvas id="agar-canvas" width="480" height="480" aria-label="Agar Arena board"></canvas>
+          <div class="touch-pad" aria-label="Agar Arena controls">
+            <button type="button" data-agar-dir="up">▲</button>
+            <div class="touch-pad-middle">
+              <button type="button" data-agar-dir="left">◀</button>
+              <button type="button" data-agar-dir="down">▼</button>
+              <button type="button" data-agar-dir="right">▶</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="orbit-dash" class="panel section-block game-variant">
+        <div class="section-heading">
+          <p class="eyebrow">IO Game 2</p>
+          <h2>Orbit Dash</h2>
+        </div>
+        <div class="snake-game io-game" aria-label="Orbit Dash game area">
+          <div class="snake-toolbar">
+            <div>
+              <span class="game-label">Score</span>
+              <strong id="orbit-score">0</strong>
+            </div>
+            <div>
+              <span class="game-label">High Score</span>
+              <strong id="orbit-high-score">0</strong>
+            </div>
+            <div>
+              <span class="game-label">Status</span>
+              <strong id="orbit-status">Ready</strong>
+            </div>
+            <div class="snake-actions">
+              <button class="button secondary orbit-toggle" type="button" id="orbit-toggle">Start</button>
+              <button class="button secondary orbit-restart" type="button" id="orbit-restart">Restart</button>
+            </div>
+          </div>
+          <canvas id="orbit-canvas" width="480" height="480" aria-label="Orbit Dash board"></canvas>
+          <div class="touch-pad" aria-label="Orbit Dash controls">
+            <button type="button" data-orbit-dir="up">▲</button>
+            <div class="touch-pad-middle">
+              <button type="button" data-orbit-dir="left">◀</button>
+              <button type="button" data-orbit-dir="down">▼</button>
+              <button type="button" data-orbit-dir="right">▶</button>
             </div>
           </div>
         </div>
