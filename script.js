@@ -172,44 +172,74 @@ if (snakeCanvas && snakeScore && snakeHighScore && snakeStatus && snakeToggle &&
   }
 
   function drawGrid() {
-    ctx.strokeStyle = 'rgba(132, 240, 179, 0.06)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, snakeCanvas.width - 2, snakeCanvas.height - 2);
 
-    for (let i = 1; i < gridSize; i += 1) {
-      const position = i * cellSize;
-      ctx.beginPath();
-      ctx.moveTo(position, 0);
-      ctx.lineTo(position, snakeCanvas.height);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, position);
-      ctx.lineTo(snakeCanvas.width, position);
-      ctx.stroke();
-    }
+    ctx.strokeStyle = 'rgba(45, 117, 255, 0.14)';
+    ctx.beginPath();
+    ctx.arc(snakeCanvas.width / 2, snakeCanvas.height / 2, snakeCanvas.width * 0.32, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   function drawCell(cell, fillStyle) {
     ctx.fillStyle = fillStyle;
-    ctx.fillRect(
-      cell.x * cellSize + 1,
-      cell.y * cellSize + 1,
-      cellSize - 2,
-      cellSize - 2
-    );
+    const size = cellSize - 2;
+    const x = cell.x * cellSize + 1;
+    const y = cell.y * cellSize + 1;
+    const radius = Math.max(4, size * 0.35);
+
+    if (typeof ctx.roundRect === 'function') {
+      ctx.beginPath();
+      ctx.roundRect(x, y, size, size, radius);
+      ctx.fill();
+      return;
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + size - radius, y);
+    ctx.quadraticCurveTo(x + size, y, x + size, y + radius);
+    ctx.lineTo(x + size, y + size - radius);
+    ctx.quadraticCurveTo(x + size, y + size, x + size - radius, y + size);
+    ctx.lineTo(x + radius, y + size);
+    ctx.quadraticCurveTo(x, y + size, x, y + size - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.fill();
+  }
+
+  function drawFoodCell(cell) {
+    const centerX = cell.x * cellSize + cellSize / 2;
+    const centerY = cell.y * cellSize + cellSize / 2;
+
+    ctx.save();
+    ctx.shadowBlur = 18;
+    ctx.shadowColor = '#e33a3f';
+    ctx.fillStyle = '#e33a3f';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, cellSize * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   function draw() {
     ctx.clearRect(0, 0, snakeCanvas.width, snakeCanvas.height);
     drawGrid();
 
-    drawCell(food, '#ff6f61');
+    drawFoodCell(food);
 
     snake.forEach((segment, index) => {
-      drawCell(segment, index === 0 ? '#84f0b3' : '#2f8f65');
+      const fillStyle = index === 0 ? '#ffffff' : index % 2 === 0 ? '#2d75ff' : '#c9d8ff';
+      ctx.save();
+      ctx.shadowBlur = index === 0 ? 14 : 10;
+      ctx.shadowColor = index === 0 ? '#2d75ff' : '#e33a3f';
+      drawCell(segment, fillStyle);
+      ctx.restore();
     });
 
     if (gameOver) {
-      ctx.fillStyle = 'rgba(5, 16, 12, 0.72)';
+      ctx.fillStyle = 'rgba(5, 13, 28, 0.72)';
       ctx.fillRect(0, 0, snakeCanvas.width, snakeCanvas.height);
       ctx.fillStyle = '#eaf6ef';
       ctx.font = 'bold 32px sans-serif';
