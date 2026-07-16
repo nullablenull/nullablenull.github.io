@@ -1,1173 +1,1250 @@
-const navToggle = document.querySelector('.nav-toggle');
-const siteNav = document.querySelector('.site-nav');
-const navLinks = siteNav ? siteNav.querySelectorAll('a') : [];
+(() => {
+  'use strict';
 
-if (navToggle && siteNav) {
-  navToggle.addEventListener('click', () => {
-    const isOpen = siteNav.classList.toggle('is-open');
-    navToggle.setAttribute('aria-expanded', String(isOpen));
+  const STORAGE_KEYS = {
+    snakeHighScore: 'nullablenull-snake-high-score',
+    agarHighScore: 'nullablenull-agar-high-score'
+  };
+
+  const state = {
+    activeGame: 'snake',
+    navOpen: false
+  };
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setupNavigation();
+    setupSnakeGame();
+    setupAgarGame();
+    setupMudGame();
   });
 
-  navLinks.forEach((link) => {
-    link.addEventListener('click', () => {
-      siteNav.classList.remove('is-open');
+  function setupNavigation() {
+    const navToggle = document.querySelector('.nav-toggle');
+    const siteNav = document.querySelector('.site-nav');
+
+    if (!navToggle || !siteNav) {
+      return;
+    }
+
+    const closeNav = () => {
+      state.navOpen = false;
       navToggle.setAttribute('aria-expanded', 'false');
-    });
-  });
-}
-
-const DIRECTIONS = {
-  up: { x: 0, y: -1 },
-  down: { x: 0, y: 1 },
-  left: { x: -1, y: 0 },
-  right: { x: 1, y: 0 },
-};
-
-const DIRECTION_LIST = [DIRECTIONS.up, DIRECTIONS.down, DIRECTIONS.left, DIRECTIONS.right];
-const gameControllers = {};
-let activeGame = 'snake';
-
-function setActiveGame(name) {
-  activeGame = name;
-}
-
-function sameCell(a, b) {
-  return a.x === b.x && a.y === b.y;
-}
-
-function isOpposite(next, current) {
-  return (
-    (next.x === 1 && current.x === -1) ||
-    (next.x === -1 && current.x === 1) ||
-    (next.y === 1 && current.y === -1) ||
-    (next.y === -1 && current.y === 1)
-  );
-}
-
-function randomInt(max) {
-  return Math.floor(Math.random() * max);
-}
-
-function cloneDirection(direction) {
-  return { x: direction.x, y: direction.y };
-}
-
-function randomDirection(exclude) {
-  const options = exclude
-    ? DIRECTION_LIST.filter((direction) => !isOpposite(direction, exclude))
-    : DIRECTION_LIST.slice();
-  return cloneDirection(options[randomInt(options.length)]);
-}
-
-function randomCell(gridSize, occupied = []) {
-  let cell = {
-    x: randomInt(gridSize),
-    y: randomInt(gridSize),
-  };
-
-  let attempts = 0;
-  while (occupied.some((item) => sameCell(item, cell)) && attempts < gridSize * gridSize) {
-    cell = {
-      x: randomInt(gridSize),
-      y: randomInt(gridSize),
+      siteNav.classList.remove('is-open');
     };
-    attempts += 1;
+
+    const openNav = () => {
+      state.navOpen = true;
+      navToggle.setAttribute('aria-expanded', 'true');
+      siteNav.classList.add('is-open');
+    };
+
+    navToggle.addEventListener('click', () => {
+      if (state.navOpen) {
+        closeNav();
+      } else {
+        openNav();
+      }
+    });
+
+    siteNav.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', () => {
+        if (window.innerWidth <= 720) {
+          closeNav();
+        }
+      });
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth > 720 && state.navOpen) {
+        closeNav();
+      }
+    });
   }
 
-  return cell;
-}
+  function createGridCanvasContext(canvas) {
+    const context = canvas.getContext('2d');
+    context.imageSmoothingEnabled = false;
+    return context;
+  }
 
-function moveCell(cell, direction, gridSize, wrap = false) {
-  const next = {
-    x: cell.x + direction.x,
-    y: cell.y + direction.y,
-  };
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
 
-  if (wrap) {
+  function randomInt(min, max) {
+    return Math.floor(min + Math.random() * (max - min + 1));
+  }
+
+  function randomChoice(items) {
+    return items[randomInt(0, items.length - 1)];
+  }
+
+  function sameCell(a, b) {
+    return a.x === b.x && a.y === b.y;
+  }
+
+  function isOpposite(a, b) {
+    return a.x === -b.x && a.y === -b.y;
+  }
+
+  function cloneDirection(direction) {
+    return { x: direction.x, y: direction.y };
+  }
+
+  function randomDirection() {
+    return randomChoice([
+      { x: 1, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: -1 }
+    ]);
+  }
+
+  function moveCell(cell, direction, amount = 1) {
     return {
-      x: (next.x + gridSize) % gridSize,
-      y: (next.y + gridSize) % gridSize,
+      x: cell.x + direction.x * amount,
+      y: cell.y + direction.y * amount
     };
   }
 
-  return next;
-}
-
-function cellToPoint(cell, cellSize) {
-  return {
-    x: cell.x * cellSize + cellSize / 2,
-    y: cell.y * cellSize + cellSize / 2,
-  };
-}
-
-function drawRoundedCell(ctx, cell, cellSize, fillStyle, radiusScale = 0.34) {
-  const size = cellSize - 2;
-  const x = cell.x * cellSize + 1;
-  const y = cell.y * cellSize + 1;
-  const radius = Math.max(4, size * radiusScale);
-
-  ctx.fillStyle = fillStyle;
-
-  if (typeof ctx.roundRect === 'function') {
-    ctx.beginPath();
-    ctx.roundRect(x, y, size, size, radius);
-    ctx.fill();
-    return;
+  function wrapCell(cell, size) {
+    return {
+      x: (cell.x + size) % size,
+      y: (cell.y + size) % size
+    };
   }
 
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + size - radius, y);
-  ctx.quadraticCurveTo(x + size, y, x + size, y + radius);
-  ctx.lineTo(x + size, y + size - radius);
-  ctx.quadraticCurveTo(x + size, y + size, x + size - radius, y + size);
-  ctx.lineTo(x + radius, y + size);
-  ctx.quadraticCurveTo(x, y + size, x, y + size - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.fill();
-}
+  function randomCell(size, avoid = []) {
+    for (let index = 0; index < 250; index += 1) {
+      const cell = { x: randomInt(0, size - 1), y: randomInt(0, size - 1) };
+      if (!avoid.some((entry) => sameCell(entry, cell))) {
+        return cell;
+      }
+    }
+    return { x: 0, y: 0 };
+  }
 
-function drawCircle(ctx, x, y, radius, fillStyle, shadowColor = fillStyle, blur = 0) {
-  ctx.save();
-  ctx.fillStyle = fillStyle;
-  ctx.shadowColor = shadowColor;
-  ctx.shadowBlur = blur;
-  ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
+  function getStoredNumber(key, fallback) {
+    try {
+      const raw = window.localStorage.getItem(key);
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    } catch {
+      return fallback;
+    }
+  }
 
-function drawDiamond(ctx, x, y, size, fillStyle, shadowColor = fillStyle, blur = 0) {
-  ctx.save();
-  ctx.fillStyle = fillStyle;
-  ctx.shadowColor = shadowColor;
-  ctx.shadowBlur = blur;
-  ctx.beginPath();
-  ctx.moveTo(x, y - size);
-  ctx.lineTo(x + size, y);
-  ctx.lineTo(x, y + size);
-  ctx.lineTo(x - size, y);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
+  function setStoredNumber(key, value) {
+    try {
+      window.localStorage.setItem(key, String(value));
+    } catch {
+      // Ignore storage failures.
+    }
+  }
 
-function bindDirectionButtons(buttons, gameName, handler) {
-  buttons.forEach((button) => {
-    button.addEventListener('click', () => {
-      setActiveGame(gameName);
-      handler(button.dataset.dir || button.dataset.agarDir || button.dataset.orbitDir);
+  function routeKeyboard(event, handlers) {
+    const target = event.target;
+    const typing = target instanceof HTMLElement && (
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.isContentEditable
+    );
+
+    if (typing) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+    if (handlers[key]) {
+      event.preventDefault();
+      handlers[key]();
+    }
+  }
+
+  function bindDirectionButtons(selector, onDirection, setActiveGame) {
+    document.querySelectorAll(selector).forEach((button) => {
+      button.addEventListener('click', () => {
+        const directionName = button.dataset.dir || button.dataset.agarDir;
+        if (directionName) {
+          setActiveGame();
+          onDirection(directionName);
+        }
+      });
     });
-  });
-}
-
-const snakeCanvas = document.getElementById('snake-canvas');
-const snakeScore = document.getElementById('snake-score');
-const snakeHighScore = document.getElementById('snake-high-score');
-const snakeStatus = document.getElementById('snake-status');
-const snakeToggle = document.getElementById('snake-toggle');
-const snakeRestart = document.getElementById('snake-restart');
-const snakeTouchButtons = document.querySelectorAll('.touch-pad button[data-dir]');
-
-if (snakeCanvas && snakeScore && snakeHighScore && snakeStatus && snakeToggle && snakeRestart) {
-  const ctx = snakeCanvas.getContext('2d');
-  const gridSize = 24;
-  const cellSize = snakeCanvas.width / gridSize;
-  const speedMs = 120;
-  const storageKey = 'nullablenull-snake-high-score';
-
-  let snake;
-  let direction;
-  let pendingDirection;
-  let food;
-  let score;
-  let highScore;
-  let timerId;
-  let started;
-  let gameOver;
-  let enemies;
-  let burstActive;
-  let burstEndsAt;
-  let burstAnchors;
-  let lastBurstAt;
-
-  function spawnFood(occupied = []) {
-    return randomCell(gridSize, occupied);
   }
 
-  function spawnEnemies() {
-    const occupied = [...snake, food];
-    enemies = [];
+  function setupSnakeGame() {
+    const canvas = document.getElementById('snake-canvas');
+    const context = createGridCanvasContext(canvas);
+    const scoreEl = document.getElementById('snake-score');
+    const highScoreEl = document.getElementById('snake-high-score');
+    const statusEl = document.getElementById('snake-status');
+    const toggleButton = document.getElementById('snake-toggle');
+    const restartButton = document.getElementById('snake-restart');
+    const size = 24;
+    const cellSize = canvas.width / size;
+    const stepDelay = 120;
 
-    while (enemies.length < 4) {
-      const cell = randomCell(gridSize, occupied.concat(enemies));
-      enemies.push({
-        x: cell.x,
-        y: cell.y,
-        dir: randomDirection(),
-        turnAt: performance.now() + 500 + randomInt(800),
+    const game = {
+      running: false,
+      paused: false,
+      gameOver: false,
+      loopId: null,
+      burstId: null,
+      burstEndsAt: 0,
+      score: 0,
+      highScore: getStoredNumber(STORAGE_KEYS.snakeHighScore, 0),
+      direction: { x: 1, y: 0 },
+      nextDirection: { x: 1, y: 0 },
+      snake: [],
+      food: { x: 0, y: 0 },
+      enemies: [],
+      message: 'Ready'
+    };
+
+    function updateHud() {
+      scoreEl.textContent = String(game.score);
+      highScoreEl.textContent = String(game.highScore);
+      statusEl.textContent = game.message;
+      toggleButton.textContent = game.running ? (game.paused ? 'Resume' : 'Pause') : 'Start';
+    }
+
+    function setMessage(message) {
+      game.message = message;
+      updateHud();
+    }
+
+    function syncHighScore() {
+      if (game.score > game.highScore) {
+        game.highScore = game.score;
+        setStoredNumber(STORAGE_KEYS.snakeHighScore, game.highScore);
+      }
+    }
+
+    function spawnFood() {
+      const occupied = [...game.snake, ...game.enemies.map((enemy) => enemy.cell)];
+      game.food = randomCell(size, occupied);
+    }
+
+    function spawnEnemy(avoid = []) {
+      const cell = randomCell(size, [...avoid, ...game.snake, game.food]);
+      return {
+        cell,
+        direction: randomDirection(),
+        exploding: false,
+        tint: Math.random() > 0.5 ? 'blue' : 'red'
+      };
+    }
+
+    function respawnEnemies() {
+      const avoid = [...game.snake, game.food];
+      game.enemies = Array.from({ length: 4 }, () => spawnEnemy(avoid));
+    }
+
+    function resetGame() {
+      game.running = false;
+      game.paused = false;
+      game.gameOver = false;
+      game.score = 0;
+      game.direction = { x: 1, y: 0 };
+      game.nextDirection = { x: 1, y: 0 };
+      game.snake = [
+        { x: 11, y: 12 },
+        { x: 10, y: 12 },
+        { x: 9, y: 12 }
+      ];
+      spawnFood();
+      respawnEnemies();
+      clearInterval(game.loopId);
+      clearInterval(game.burstId);
+      game.loopId = null;
+      game.burstId = null;
+      game.burstEndsAt = 0;
+      setMessage('Ready');
+      updateHud();
+      draw();
+    }
+
+    function startLoops() {
+      if (game.loopId) {
+        clearInterval(game.loopId);
+      }
+      if (game.burstId) {
+        clearInterval(game.burstId);
+      }
+
+      game.loopId = setInterval(step, stepDelay);
+      game.burstId = setInterval(triggerBurst, 4000);
+      game.running = true;
+      game.paused = false;
+      setMessage('Running');
+    }
+
+    function startGame() {
+      if (game.gameOver) {
+        resetGame();
+      }
+
+      if (!game.running) {
+        startLoops();
+      } else if (game.paused) {
+        game.paused = false;
+        setMessage('Running');
+      }
+      state.activeGame = 'snake';
+      updateHud();
+    }
+
+    function pauseGame() {
+      if (!game.running || game.gameOver) {
+        return;
+      }
+
+      game.paused = !game.paused;
+      setMessage(game.paused ? 'Paused' : 'Running');
+      updateHud();
+    }
+
+    function finishGame(reason) {
+      game.running = false;
+      game.paused = false;
+      game.gameOver = true;
+      clearInterval(game.loopId);
+      clearInterval(game.burstId);
+      game.loopId = null;
+      game.burstId = null;
+      syncHighScore();
+      setMessage(`Game over - ${reason}`);
+      updateHud();
+    }
+
+    function triggerBurst() {
+      if (!game.running || game.paused || game.gameOver) {
+        return;
+      }
+
+      game.enemies.forEach((enemy) => {
+        enemy.exploding = true;
+      });
+      game.burstEndsAt = Date.now() + 650;
+      setMessage('Enemy burst');
+    }
+
+    function respawnBurstEnemies() {
+      const avoid = [...game.snake, game.food];
+      game.enemies = game.enemies.map(() => spawnEnemy(avoid));
+      game.burstEndsAt = 0;
+      if (!game.gameOver) {
+        setMessage('Running');
+      }
+    }
+
+    function updateDirection(name) {
+      const directionMap = {
+        up: { x: 0, y: -1 },
+        down: { x: 0, y: 1 },
+        left: { x: -1, y: 0 },
+        right: { x: 1, y: 0 }
+      };
+
+      const next = directionMap[name];
+      if (!next) {
+        return;
+      }
+
+      if (!isOpposite(next, game.direction)) {
+        game.nextDirection = next;
+      }
+    }
+
+    function moveEnemies() {
+      game.enemies = game.enemies.map((enemy) => {
+        if (enemy.exploding) {
+          return enemy;
+        }
+
+        const turnChance = Math.random() < 0.28;
+        const direction = turnChance ? randomDirection() : enemy.direction;
+        const moved = wrapCell(moveCell(enemy.cell, direction), size);
+
+        return {
+          ...enemy,
+          cell: moved,
+          direction
+        };
       });
     }
-  }
 
-  function readHighScore() {
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      const parsed = Number.parseInt(raw || '0', 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  function writeHighScore(value) {
-    highScore = Math.max(highScore, value);
-    snakeHighScore.textContent = String(highScore);
-
-    try {
-      window.localStorage.setItem(storageKey, String(highScore));
-    } catch {
-      // localStorage may be unavailable in restricted contexts.
-    }
-  }
-
-  function setStatus(value) {
-    snakeStatus.textContent = value;
-  }
-
-  function resetGame() {
-    snake = [
-      { x: 10, y: 12 },
-      { x: 9, y: 12 },
-      { x: 8, y: 12 },
-    ];
-    direction = cloneDirection(DIRECTIONS.right);
-    pendingDirection = cloneDirection(DIRECTIONS.right);
-    score = 0;
-    started = false;
-    gameOver = false;
-    burstActive = false;
-    burstEndsAt = 0;
-    burstAnchors = [];
-    lastBurstAt = performance.now();
-    snakeToggle.textContent = 'Start';
-    food = spawnFood([...snake]);
-    snakeScore.textContent = String(score);
-    snakeStatus.textContent = 'Ready';
-    snakeHighScore.textContent = String(highScore);
-    spawnEnemies();
-    draw();
-  }
-
-  function setDirection(next) {
-    if (!next || isOpposite(next, direction)) {
-      return;
+    function checkEnemyCollision(head) {
+      return game.enemies.some((enemy) => !enemy.exploding && sameCell(enemy.cell, head));
     }
 
-    pendingDirection = cloneDirection(next);
-
-    if (!started && !gameOver) {
-      startGame();
-    }
-  }
-
-  function updateEnemies(now) {
-    if (!burstActive && now - lastBurstAt >= 4000) {
-      burstActive = true;
-      burstEndsAt = now + 280;
-      burstAnchors = enemies.map((enemy) => ({ x: enemy.x, y: enemy.y }));
-      return;
-    }
-
-    if (burstActive) {
-      if (now >= burstEndsAt) {
-        burstActive = false;
-        lastBurstAt = now;
-        spawnEnemies();
+    function step() {
+      if (!game.running || game.paused || game.gameOver) {
+        draw();
+        return;
       }
 
-      return;
-    }
-
-    enemies.forEach((enemy) => {
-      if (now >= enemy.turnAt || Math.random() < 0.12) {
-        enemy.dir = randomDirection(enemy.dir);
-        enemy.turnAt = now + 500 + randomInt(900);
+      if (game.nextDirection && !isOpposite(game.nextDirection, game.direction)) {
+        game.direction = cloneDirection(game.nextDirection);
       }
 
-      const next = moveCell(enemy, enemy.dir, gridSize, true);
-      enemy.x = next.x;
-      enemy.y = next.y;
-    });
-  }
+      const head = moveCell(game.snake[0], game.direction);
 
-  function move() {
-    if (gameOver) {
-      return;
-    }
+      if (head.x < 0 || head.x >= size || head.y < 0 || head.y >= size) {
+        finishGame('hit the edge');
+        draw();
+        return;
+      }
 
-    direction = cloneDirection(pendingDirection);
-    const head = snake[0];
-    const nextHead = {
-      x: head.x + direction.x,
-      y: head.y + direction.y,
-    };
+      if (game.snake.some((segment) => sameCell(segment, head))) {
+        finishGame('hit itself');
+        draw();
+        return;
+      }
 
-    const willEat = sameCell(nextHead, food);
-    const bodyToCheck = willEat ? snake : snake.slice(0, -1);
+      if (checkEnemyCollision(head)) {
+        finishGame('met an enemy');
+        draw();
+        return;
+      }
 
-    const hitWall =
-      nextHead.x < 0 ||
-      nextHead.x >= gridSize ||
-      nextHead.y < 0 ||
-      nextHead.y >= gridSize;
+      game.snake.unshift(head);
 
-    const hitSelf = bodyToCheck.some((segment) => sameCell(segment, nextHead));
+      if (sameCell(head, game.food)) {
+        game.score += 1;
+        syncHighScore();
+        spawnFood();
+      } else {
+        game.snake.pop();
+      }
 
-    if (hitWall || hitSelf) {
-      gameOver = true;
-      stopLoop();
-      snakeToggle.textContent = 'Start';
-      setStatus('Game Over');
+      moveEnemies();
+
+      if (game.burstEndsAt && Date.now() >= game.burstEndsAt) {
+        respawnBurstEnemies();
+      }
+
+      updateHud();
       draw();
-      return;
     }
 
-    snake.unshift(nextHead);
+    function drawGrid() {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#08172c';
+      context.fillRect(0, 0, canvas.width, canvas.height);
 
-    if (willEat) {
-      score += 1;
-      snakeScore.textContent = String(score);
-      writeHighScore(score);
-      food = spawnFood([...snake, ...enemies]);
-    } else {
-      snake.pop();
+      context.strokeStyle = 'rgba(247, 249, 255, 0.06)';
+      context.lineWidth = 1;
+      for (let index = 0; index <= size; index += 1) {
+        const pos = index * cellSize;
+        context.beginPath();
+        context.moveTo(pos, 0);
+        context.lineTo(pos, canvas.height);
+        context.stroke();
+
+        context.beginPath();
+        context.moveTo(0, pos);
+        context.lineTo(canvas.width, pos);
+        context.stroke();
+      }
     }
 
-    updateEnemies(performance.now());
-
-    if (burstActive) {
-      draw();
-      return;
+    function drawFood() {
+      context.fillStyle = '#e33a3f';
+      context.beginPath();
+      context.arc(
+        game.food.x * cellSize + cellSize / 2,
+        game.food.y * cellSize + cellSize / 2,
+        cellSize * 0.28,
+        0,
+        Math.PI * 2
+      );
+      context.fill();
     }
 
-    if (enemies.some((enemy) => sameCell(enemy, snake[0]))) {
-      gameOver = true;
-      stopLoop();
-      snakeToggle.textContent = 'Start';
-      setStatus('Game Over');
-      draw();
-      return;
+    function drawEnemies() {
+      game.enemies.forEach((enemy, index) => {
+        const x = enemy.cell.x * cellSize + cellSize / 2;
+        const y = enemy.cell.y * cellSize + cellSize / 2;
+        if (enemy.exploding) {
+          context.fillStyle = index % 2 === 0 ? 'rgba(45, 117, 255, 0.9)' : 'rgba(227, 58, 63, 0.9)';
+          context.beginPath();
+          context.arc(x, y, cellSize * 0.38, 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = 'rgba(255, 255, 255, 0.85)';
+          context.beginPath();
+          context.arc(x, y, cellSize * 0.12, 0, Math.PI * 2);
+          context.fill();
+          return;
+        }
+
+        context.fillStyle = enemy.tint === 'blue' ? '#2d75ff' : '#e33a3f';
+        context.beginPath();
+        context.arc(x, y, cellSize * 0.34, 0, Math.PI * 2);
+        context.fill();
+      });
     }
 
-    draw();
-  }
+    function drawSnake() {
+      game.snake.forEach((segment, index) => {
+        const x = segment.x * cellSize;
+        const y = segment.y * cellSize;
+        context.fillStyle = index === 0 ? '#f7f9ff' : '#d6def0';
+        context.fillRect(x + 2, y + 2, cellSize - 4, cellSize - 4);
 
-  function drawBackground() {
-    ctx.clearRect(0, 0, snakeCanvas.width, snakeCanvas.height);
-    ctx.fillStyle = '#081426';
-    ctx.fillRect(0, 0, snakeCanvas.width, snakeCanvas.height);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, snakeCanvas.width - 2, snakeCanvas.height - 2);
-    ctx.strokeStyle = 'rgba(45, 117, 255, 0.12)';
-    ctx.beginPath();
-    ctx.arc(snakeCanvas.width / 2, snakeCanvas.height / 2, snakeCanvas.width * 0.32, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+        if (index === 0) {
+          context.fillStyle = '#17356b';
+          context.fillRect(x + 6, y + 6, cellSize - 12, cellSize - 12);
+        }
+      });
+    }
 
-  function drawFood() {
-    const point = cellToPoint(food, cellSize);
-    drawCircle(ctx, point.x, point.y, cellSize * 0.28, '#e33a3f', '#e33a3f', 18);
-  }
+    function drawOverlay() {
+      if (game.running && !game.paused && !game.gameOver) {
+        return;
+      }
 
-  function drawSnakeSegments() {
-    snake.forEach((segment, index) => {
-      const fillStyle = index === 0 ? '#ffffff' : index % 2 === 0 ? '#2d75ff' : '#c9d8ff';
-      ctx.save();
-      ctx.shadowBlur = index === 0 ? 14 : 10;
-      ctx.shadowColor = index === 0 ? '#2d75ff' : '#e33a3f';
-      drawRoundedCell(ctx, segment, cellSize, fillStyle, 0.34);
-      ctx.restore();
+      const label = game.gameOver ? 'Game over' : game.paused ? 'Paused' : 'Ready to play';
+
+      context.fillStyle = 'rgba(6, 16, 31, 0.5)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#f7f9ff';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.font = '700 22px "Trebuchet MS", sans-serif';
+      context.fillText(label, canvas.width / 2, canvas.height / 2 - 12);
+      context.font = '500 14px "Trebuchet MS", sans-serif';
+      context.fillText('Use arrow keys, WASD, or touch controls', canvas.width / 2, canvas.height / 2 + 18);
+    }
+
+    function draw() {
+      drawGrid();
+      drawFood();
+      drawEnemies();
+      drawSnake();
+      drawOverlay();
+    }
+
+    canvas.addEventListener('pointerdown', () => {
+      state.activeGame = 'snake';
     });
-  }
 
-  function drawExplosion(anchor, index) {
-    const point = cellToPoint(anchor, cellSize);
-    const base = 14 + (index % 3) * 2;
-    drawCircle(ctx, point.x, point.y, base + 8, 'rgba(227, 58, 63, 0.18)', '#e33a3f', 14);
-    drawCircle(ctx, point.x, point.y, base, 'rgba(255, 255, 255, 0.24)', '#ffffff', 8);
-  }
-
-  function drawEnemies() {
-    if (burstActive) {
-      burstAnchors.forEach((anchor, index) => drawExplosion(anchor, index));
-      return;
-    }
-
-    enemies.forEach((enemy, index) => {
-      const point = cellToPoint(enemy, cellSize);
-      const fillStyle = index % 2 === 0 ? '#e33a3f' : '#2d75ff';
-      drawCircle(ctx, point.x, point.y, cellSize * 0.23, fillStyle, fillStyle, 14);
-      drawCircle(ctx, point.x, point.y, cellSize * 0.1, '#ffffff', '#ffffff', 0);
+    toggleButton.addEventListener('click', () => {
+      state.activeGame = 'snake';
+      if (!game.running || game.paused) {
+        startGame();
+      } else {
+        pauseGame();
+      }
     });
-  }
 
-  function drawGameOver() {
-    if (!gameOver) {
-      return;
-    }
-
-    ctx.fillStyle = 'rgba(5, 13, 28, 0.72)';
-    ctx.fillRect(0, 0, snakeCanvas.width, snakeCanvas.height);
-    ctx.fillStyle = '#eaf6ef';
-    ctx.font = 'bold 32px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Game Over', snakeCanvas.width / 2, snakeCanvas.height / 2 - 8);
-    ctx.font = '16px sans-serif';
-    ctx.fillText('Restart to play again', snakeCanvas.width / 2, snakeCanvas.height / 2 + 26);
-  }
-
-  function draw() {
-    drawBackground();
-    drawFood();
-    drawEnemies();
-    drawSnakeSegments();
-    drawGameOver();
-  }
-
-  function startLoop() {
-    if (timerId) {
-      return;
-    }
-
-    timerId = window.setInterval(move, speedMs);
-  }
-
-  function stopLoop() {
-    if (!timerId) {
-      return;
-    }
-
-    window.clearInterval(timerId);
-    timerId = null;
-  }
-
-  function startGame() {
-    if (gameOver) {
-      return;
-    }
-
-    started = true;
-    setStatus('Playing');
-    snakeToggle.textContent = 'Pause';
-    startLoop();
-  }
-
-  function pauseGame() {
-    if (!started || gameOver) {
-      return;
-    }
-
-    started = false;
-    stopLoop();
-    setStatus('Paused');
-    snakeToggle.textContent = 'Resume';
-  }
-
-  function toggleGame() {
-    setActiveGame('snake');
-
-    if (gameOver) {
+    restartButton.addEventListener('click', () => {
+      state.activeGame = 'snake';
       resetGame();
       startGame();
-      return;
-    }
+    });
 
-    if (!started) {
-      startGame();
-    } else {
-      pauseGame();
-    }
-  }
+    bindDirectionButtons('[data-dir]', (name) => updateDirection(name), () => {
+      state.activeGame = 'snake';
+      canvas.focus?.();
+    });
 
-  function restartGame() {
-    setActiveGame('snake');
-    stopLoop();
+    document.addEventListener('keydown', (event) => {
+      if (state.activeGame !== 'snake') {
+        return;
+      }
+
+      routeKeyboard(event, {
+        arrowup: () => updateDirection('up'),
+        w: () => updateDirection('up'),
+        arrowdown: () => updateDirection('down'),
+        s: () => updateDirection('down'),
+        arrowleft: () => updateDirection('left'),
+        a: () => updateDirection('left'),
+        arrowright: () => updateDirection('right'),
+        d: () => updateDirection('right'),
+        ' ': () => {
+          if (!game.running) {
+            startGame();
+          } else {
+            pauseGame();
+          }
+        }
+      });
+    });
+
     resetGame();
   }
 
-  snakeCanvas.addEventListener('pointerdown', () => setActiveGame('snake'));
-  snakeRestart.addEventListener('click', restartGame);
-  snakeToggle.addEventListener('click', toggleGame);
-  bindDirectionButtons(snakeTouchButtons, 'snake', (dirName) => {
-    setDirection(DIRECTIONS[dirName]);
-  });
+  function setupAgarGame() {
+    const canvas = document.getElementById('agar-canvas');
+    const context = createGridCanvasContext(canvas);
+    const scoreEl = document.getElementById('agar-score');
+    const highScoreEl = document.getElementById('agar-high-score');
+    const statusEl = document.getElementById('agar-status');
+    const toggleButton = document.getElementById('agar-toggle');
+    const restartButton = document.getElementById('agar-restart');
 
-  highScore = readHighScore();
-  snakeHighScore.textContent = String(highScore);
-  resetGame();
-
-  gameControllers.snake = {
-    setDirection,
-    toggleGame,
-    restartGame,
-  };
-}
-
-const agarCanvas = document.getElementById('agar-canvas');
-const agarScore = document.getElementById('agar-score');
-const agarHighScore = document.getElementById('agar-high-score');
-const agarStatus = document.getElementById('agar-status');
-const agarToggle = document.getElementById('agar-toggle');
-const agarRestart = document.getElementById('agar-restart');
-const agarTouchButtons = document.querySelectorAll('.touch-pad button[data-agar-dir]');
-
-if (agarCanvas && agarScore && agarHighScore && agarStatus && agarToggle && agarRestart) {
-  const ctx = agarCanvas.getContext('2d');
-  const gridSize = 18;
-  const cellSize = agarCanvas.width / gridSize;
-  const speedMs = 130;
-  const storageKey = 'nullablenull-agar-high-score';
-
-  let player;
-  let direction;
-  let pendingDirection;
-  let pellets;
-  let rivals;
-  let score;
-  let highScore;
-  let timerId;
-  let started;
-  let gameOver;
-
-  function occupiedCells() {
-    return [player, ...pellets, ...rivals];
-  }
-
-  function spawnPellet(existing = []) {
-    return randomCell(gridSize, existing);
-  }
-
-  function spawnPellets(count) {
-    const cells = [];
-    while (cells.length < count) {
-      const pellet = spawnPellet([...occupiedCells(), ...cells]);
-      cells.push(pellet);
-    }
-    return cells;
-  }
-
-  function spawnRival(existing = []) {
-    const cell = randomCell(gridSize, existing);
-    return {
-      x: cell.x,
-      y: cell.y,
-      mass: 1 + randomInt(4),
-      dir: randomDirection(),
-      turnAt: performance.now() + 300 + randomInt(700),
+    const world = {
+      width: 1200,
+      height: 1200,
+      backgroundGrid: 80
     };
-  }
 
-  function spawnRivals(count) {
-    const list = [];
-    while (list.length < count) {
-      const rival = spawnRival([...occupiedCells(), ...list]);
-      list.push(rival);
-    }
-    return list;
-  }
+    const game = {
+      running: false,
+      paused: false,
+      gameOver: false,
+      loopId: null,
+      score: 0,
+      highScore: getStoredNumber(STORAGE_KEYS.agarHighScore, 0),
+      direction: { x: 0, y: 0 },
+      targetDirection: { x: 0, y: 0 },
+      player: null,
+      pellets: [],
+      rivals: [],
+      message: 'Ready'
+    };
 
-  function readHighScore() {
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      const parsed = Number.parseInt(raw || '0', 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  function writeHighScore(value) {
-    highScore = Math.max(highScore, value);
-    agarHighScore.textContent = String(highScore);
-
-    try {
-      window.localStorage.setItem(storageKey, String(highScore));
-    } catch {
-      // localStorage may be unavailable in restricted contexts.
-    }
-  }
-
-  function setStatus(value) {
-    agarStatus.textContent = value;
-  }
-
-  function resetGame() {
-    player = { x: 9, y: 9, mass: 3 };
-    direction = cloneDirection(DIRECTIONS.right);
-    pendingDirection = cloneDirection(DIRECTIONS.right);
-    score = 0;
-    started = false;
-    gameOver = false;
-    agarToggle.textContent = 'Start';
-    pellets = [];
-    rivals = [];
-    pellets = spawnPellets(18);
-    rivals = spawnRivals(4);
-    agarScore.textContent = String(score);
-    agarStatus.textContent = 'Ready';
-    agarHighScore.textContent = String(highScore);
-    draw();
-  }
-
-  function setDirection(next) {
-    if (!next || isOpposite(next, direction)) {
-      return;
+    function updateHud() {
+      scoreEl.textContent = String(game.score);
+      highScoreEl.textContent = String(game.highScore);
+      statusEl.textContent = game.message;
+      toggleButton.textContent = game.running ? (game.paused ? 'Resume' : 'Pause') : 'Start';
     }
 
-    pendingDirection = cloneDirection(next);
-
-    if (!started && !gameOver) {
-      startGame();
+    function setMessage(message) {
+      game.message = message;
+      updateHud();
     }
-  }
 
-  function stepRivals(now) {
-    rivals.forEach((rival) => {
-      if (now >= rival.turnAt || Math.random() < 0.18) {
-        rival.dir = randomDirection(rival.dir);
-        rival.turnAt = now + 260 + randomInt(700);
+    function syncHighScore() {
+      if (game.score > game.highScore) {
+        game.highScore = game.score;
+        setStoredNumber(STORAGE_KEYS.agarHighScore, game.highScore);
+      }
+    }
+
+    function createPlayer() {
+      return {
+        x: world.width / 2,
+        y: world.height / 2,
+        radius: 20,
+        speed: 3.2
+      };
+    }
+
+    function randomWorldPoint(padding = 20) {
+      return {
+        x: randomInt(padding, world.width - padding),
+        y: randomInt(padding, world.height - padding)
+      };
+    }
+
+    function spawnPellets() {
+      game.pellets = Array.from({ length: 55 }, () => {
+        const point = randomWorldPoint(20);
+        return { ...point, radius: randomInt(3, 6) };
+      });
+    }
+
+    function spawnRivals() {
+      game.rivals = Array.from({ length: 5 }, (_, index) => {
+        const point = randomWorldPoint(40);
+        return {
+          x: point.x,
+          y: point.y,
+          radius: index % 2 === 0 ? 26 : 16,
+          speed: 1.7 + Math.random() * 0.8,
+          direction: randomDirection(),
+          name: index % 2 === 0 ? 'Blue rival' : 'Red rival'
+        };
+      });
+    }
+
+    function resetGame() {
+      game.running = false;
+      game.paused = false;
+      game.gameOver = false;
+      game.score = 0;
+      game.direction = { x: 0, y: 0 };
+      game.targetDirection = { x: 0, y: 0 };
+      game.player = createPlayer();
+      spawnPellets();
+      spawnRivals();
+      clearInterval(game.loopId);
+      game.loopId = null;
+      setMessage('Ready');
+      updateHud();
+      draw();
+    }
+
+    function startLoop() {
+      if (game.loopId) {
+        clearInterval(game.loopId);
       }
 
-      const next = moveCell(rival, rival.dir, gridSize, true);
-      rival.x = next.x;
-      rival.y = next.y;
-    });
-  }
-
-  function move() {
-    if (gameOver) {
-      return;
+      game.loopId = setInterval(step, 33);
+      game.running = true;
+      game.paused = false;
+      setMessage('Running');
     }
 
-    direction = cloneDirection(pendingDirection);
-    player = moveCell(player, direction, gridSize, true);
-
-    const pelletIndex = pellets.findIndex((pellet) => sameCell(pellet, player));
-    if (pelletIndex !== -1) {
-      pellets.splice(pelletIndex, 1);
-      pellets.push(spawnPellet(occupiedCells()));
-      score += 1;
-      player.mass += 1;
-      agarScore.textContent = String(score);
-      writeHighScore(score);
-    }
-
-    stepRivals(performance.now());
-
-    for (let index = 0; index < rivals.length; index += 1) {
-      const rival = rivals[index];
-      if (!sameCell(rival, player)) {
-        continue;
+    function startGame() {
+      if (game.gameOver) {
+        resetGame();
       }
 
-      if (player.mass >= rival.mass) {
-        score += rival.mass * 2;
-        player.mass += rival.mass;
-        agarScore.textContent = String(score);
-        writeHighScore(score);
-        rivals[index] = spawnRival(occupiedCells().filter((cell) => cell !== rival));
-      } else {
-        gameOver = true;
-        stopLoop();
-        agarToggle.textContent = 'Start';
-        setStatus('Game Over');
-        draw();
+      if (!game.running) {
+        startLoop();
+      } else if (game.paused) {
+        game.paused = false;
+        setMessage('Running');
+      }
+
+      state.activeGame = 'agar';
+      updateHud();
+    }
+
+    function pauseGame() {
+      if (!game.running || game.gameOver) {
+        return;
+      }
+
+      game.paused = !game.paused;
+      setMessage(game.paused ? 'Paused' : 'Running');
+      updateHud();
+    }
+
+    function finishGame(reason) {
+      game.running = false;
+      game.paused = false;
+      game.gameOver = true;
+      clearInterval(game.loopId);
+      game.loopId = null;
+      syncHighScore();
+      setMessage(`Game over - ${reason}`);
+      updateHud();
+    }
+
+    function setDirection(name) {
+      const map = {
+        up: { x: 0, y: -1 },
+        down: { x: 0, y: 1 },
+        left: { x: -1, y: 0 },
+        right: { x: 1, y: 0 }
+      };
+
+      const direction = map[name];
+      if (!direction) {
+        return;
+      }
+
+      game.targetDirection = direction;
+    }
+
+    function movePlayer() {
+      if (game.targetDirection.x || game.targetDirection.y) {
+        game.direction = cloneDirection(game.targetDirection);
+      }
+
+      const nextX = clamp(
+        game.player.x + game.direction.x * game.player.speed,
+        game.player.radius,
+        world.width - game.player.radius
+      );
+      const nextY = clamp(
+        game.player.y + game.direction.y * game.player.speed,
+        game.player.radius,
+        world.height - game.player.radius
+      );
+
+      game.player.x = nextX;
+      game.player.y = nextY;
+    }
+
+    function moveRivals() {
+      game.rivals = game.rivals.map((rival) => {
+        const chasing = Math.random() < 0.18;
+        const direction = chasing
+          ? {
+              x: Math.sign(game.player.x - rival.x),
+              y: Math.sign(game.player.y - rival.y)
+            }
+          : (Math.random() < 0.3 ? randomDirection() : rival.direction);
+
+        const moved = {
+          x: clamp(rival.x + direction.x * rival.speed, rival.radius, world.width - rival.radius),
+          y: clamp(rival.y + direction.y * rival.speed, rival.radius, world.height - rival.radius)
+        };
+
+        return {
+          ...rival,
+          x: moved.x,
+          y: moved.y,
+          direction
+        };
+      });
+    }
+
+    function consumePellets() {
+      game.pellets = game.pellets.filter((pellet) => {
+        const dx = pellet.x - game.player.x;
+        const dy = pellet.y - game.player.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= game.player.radius + pellet.radius) {
+          game.player.radius += 0.22;
+          game.score += 1;
+          syncHighScore();
+          return false;
+        }
+        return true;
+      });
+
+      while (game.pellets.length < 50) {
+        const point = randomWorldPoint(20);
+        game.pellets.push({ ...point, radius: randomInt(3, 6) });
+      }
+    }
+
+    function handleRivalCollisions() {
+      for (let index = game.rivals.length - 1; index >= 0; index -= 1) {
+        const rival = game.rivals[index];
+        const distance = Math.hypot(game.player.x - rival.x, game.player.y - rival.y);
+        if (distance > game.player.radius + rival.radius - 2) {
+          continue;
+        }
+
+        if (game.player.radius >= rival.radius * 1.08) {
+          game.player.radius += rival.radius * 0.08;
+          game.score += 8;
+          game.rivals.splice(index, 1);
+          syncHighScore();
+          const replacement = randomWorldPoint(40);
+          game.rivals.push({
+            x: replacement.x,
+            y: replacement.y,
+            radius: rival.radius,
+            speed: rival.speed,
+            direction: randomDirection(),
+            name: rival.name
+          });
+          setMessage('Enemy absorbed');
+          continue;
+        }
+
+        finishGame('overtaken by a rival');
         return;
       }
     }
 
-    draw();
-  }
-
-  function drawBackground() {
-    ctx.clearRect(0, 0, agarCanvas.width, agarCanvas.height);
-    ctx.fillStyle = '#071325';
-    ctx.fillRect(0, 0, agarCanvas.width, agarCanvas.height);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
-    for (let i = 0; i <= gridSize; i += 1) {
-      const position = i * cellSize;
-      ctx.beginPath();
-      ctx.moveTo(position, 0);
-      ctx.lineTo(position, agarCanvas.height);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, position);
-      ctx.lineTo(agarCanvas.width, position);
-      ctx.stroke();
-    }
-  }
-
-  function drawPellets() {
-    pellets.forEach((pellet) => {
-      const point = cellToPoint(pellet, cellSize);
-      drawCircle(ctx, point.x, point.y, cellSize * 0.13, '#c9d8ff', '#ffffff', 6);
-    });
-  }
-
-  function drawPlayer() {
-    const point = cellToPoint(player, cellSize);
-    const radius = Math.min(cellSize * 0.5, 8 + player.mass * 1.7);
-    drawCircle(ctx, point.x, point.y, radius, '#2d75ff', '#2d75ff', 18);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 12px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(String(player.mass), point.x, point.y + 4);
-  }
-
-  function drawRivals() {
-    rivals.forEach((rival) => {
-      const point = cellToPoint(rival, cellSize);
-      const radius = Math.min(cellSize * 0.48, 7 + rival.mass * 1.6);
-      drawCircle(ctx, point.x, point.y, radius, '#e33a3f', '#e33a3f', 14);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(String(rival.mass), point.x, point.y + 4);
-    });
-  }
-
-  function drawGameOver() {
-    if (!gameOver) {
-      return;
-    }
-
-    ctx.fillStyle = 'rgba(5, 13, 28, 0.66)';
-    ctx.fillRect(0, 0, agarCanvas.width, agarCanvas.height);
-    ctx.fillStyle = '#eaf6ef';
-    ctx.font = 'bold 30px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Game Over', agarCanvas.width / 2, agarCanvas.height / 2 - 6);
-    ctx.font = '16px sans-serif';
-    ctx.fillText('Restart to play again', agarCanvas.width / 2, agarCanvas.height / 2 + 24);
-  }
-
-  function draw() {
-    drawBackground();
-    drawPellets();
-    drawRivals();
-    drawPlayer();
-    drawGameOver();
-  }
-
-  function startLoop() {
-    if (timerId) {
-      return;
-    }
-
-    timerId = window.setInterval(move, speedMs);
-  }
-
-  function stopLoop() {
-    if (!timerId) {
-      return;
-    }
-
-    window.clearInterval(timerId);
-    timerId = null;
-  }
-
-  function startGame() {
-    if (gameOver) {
-      return;
-    }
-
-    started = true;
-    setStatus('Playing');
-    agarToggle.textContent = 'Pause';
-    startLoop();
-  }
-
-  function pauseGame() {
-    if (!started || gameOver) {
-      return;
-    }
-
-    started = false;
-    stopLoop();
-    setStatus('Paused');
-    agarToggle.textContent = 'Resume';
-  }
-
-  function toggleGame() {
-    setActiveGame('agar');
-
-    if (gameOver) {
-      resetGame();
-      startGame();
-      return;
-    }
-
-    if (!started) {
-      startGame();
-    } else {
-      pauseGame();
-    }
-  }
-
-  function restartGame() {
-    setActiveGame('agar');
-    stopLoop();
-    resetGame();
-  }
-
-  agarCanvas.addEventListener('pointerdown', () => setActiveGame('agar'));
-  agarRestart.addEventListener('click', restartGame);
-  agarToggle.addEventListener('click', toggleGame);
-  bindDirectionButtons(agarTouchButtons, 'agar', (dirName) => {
-    setDirection(DIRECTIONS[dirName]);
-  });
-
-  highScore = readHighScore();
-  agarHighScore.textContent = String(highScore);
-  resetGame();
-
-  gameControllers.agar = {
-    setDirection,
-    toggleGame,
-    restartGame,
-  };
-}
-
-const orbitCanvas = document.getElementById('orbit-canvas');
-const orbitScore = document.getElementById('orbit-score');
-const orbitHighScore = document.getElementById('orbit-high-score');
-const orbitStatus = document.getElementById('orbit-status');
-const orbitToggle = document.getElementById('orbit-toggle');
-const orbitRestart = document.getElementById('orbit-restart');
-const orbitTouchButtons = document.querySelectorAll('.touch-pad button[data-orbit-dir]');
-
-if (orbitCanvas && orbitScore && orbitHighScore && orbitStatus && orbitToggle && orbitRestart) {
-  const ctx = orbitCanvas.getContext('2d');
-  const gridSize = 18;
-  const cellSize = orbitCanvas.width / gridSize;
-  const speedMs = 120;
-  const storageKey = 'nullablenull-orbit-high-score';
-
-  let player;
-  let direction;
-  let pendingDirection;
-  let stars;
-  let comets;
-  let score;
-  let highScore;
-  let timerId;
-  let started;
-  let gameOver;
-
-  function occupiedCells() {
-    return [player, ...stars, ...comets];
-  }
-
-  function spawnStar(existing = []) {
-    return randomCell(gridSize, existing);
-  }
-
-  function spawnStars(count) {
-    const list = [];
-    while (list.length < count) {
-      list.push(spawnStar([...occupiedCells(), ...list]));
-    }
-    return list;
-  }
-
-  function spawnComet(existing = []) {
-    const cell = randomCell(gridSize, existing);
-    return {
-      x: cell.x,
-      y: cell.y,
-      dir: randomDirection(),
-      turnAt: performance.now() + 320 + randomInt(700),
-    };
-  }
-
-  function spawnComets(count) {
-    const list = [];
-    while (list.length < count) {
-      list.push(spawnComet([...occupiedCells(), ...list]));
-    }
-    return list;
-  }
-
-  function readHighScore() {
-    try {
-      const raw = window.localStorage.getItem(storageKey);
-      const parsed = Number.parseInt(raw || '0', 10);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  function writeHighScore(value) {
-    highScore = Math.max(highScore, value);
-    orbitHighScore.textContent = String(highScore);
-
-    try {
-      window.localStorage.setItem(storageKey, String(highScore));
-    } catch {
-      // localStorage may be unavailable in restricted contexts.
-    }
-  }
-
-  function setStatus(value) {
-    orbitStatus.textContent = value;
-  }
-
-  function resetGame() {
-    player = { x: 9, y: 9 };
-    direction = cloneDirection(DIRECTIONS.right);
-    pendingDirection = cloneDirection(DIRECTIONS.right);
-    score = 0;
-    started = false;
-    gameOver = false;
-    orbitToggle.textContent = 'Start';
-    stars = [];
-    comets = [];
-    stars = spawnStars(12);
-    comets = spawnComets(4);
-    orbitScore.textContent = String(score);
-    orbitStatus.textContent = 'Ready';
-    orbitHighScore.textContent = String(highScore);
-    draw();
-  }
-
-  function setDirection(next) {
-    if (!next || isOpposite(next, direction)) {
-      return;
-    }
-
-    pendingDirection = cloneDirection(next);
-
-    if (!started && !gameOver) {
-      startGame();
-    }
-  }
-
-  function stepComets(now) {
-    comets.forEach((comet) => {
-      if (now >= comet.turnAt || Math.random() < 0.2) {
-        comet.dir = randomDirection(comet.dir);
-        comet.turnAt = now + 260 + randomInt(700);
+    function step() {
+      if (!game.running || game.paused || game.gameOver) {
+        draw();
+        return;
       }
 
-      const next = moveCell(comet, comet.dir, gridSize, true);
-      comet.x = next.x;
-      comet.y = next.y;
-    });
-  }
-
-  function move() {
-    if (gameOver) {
-      return;
-    }
-
-    direction = cloneDirection(pendingDirection);
-    player = moveCell(player, direction, gridSize, true);
-
-    const starIndex = stars.findIndex((star) => sameCell(star, player));
-    if (starIndex !== -1) {
-      stars.splice(starIndex, 1);
-      stars.push(spawnStar(occupiedCells()));
-      score += 1;
-      orbitScore.textContent = String(score);
-      writeHighScore(score);
-    }
-
-    stepComets(performance.now());
-
-    if (comets.some((comet) => sameCell(comet, player))) {
-      gameOver = true;
-      stopLoop();
-      orbitToggle.textContent = 'Start';
-      setStatus('Game Over');
+      movePlayer();
+      moveRivals();
+      consumePellets();
+      handleRivalCollisions();
+      syncHighScore();
+      updateHud();
       draw();
-      return;
     }
 
-    draw();
-  }
-
-  function drawBackground() {
-    ctx.clearRect(0, 0, orbitCanvas.width, orbitCanvas.height);
-    ctx.fillStyle = '#071325';
-    ctx.fillRect(0, 0, orbitCanvas.width, orbitCanvas.height);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
-    for (let i = 0; i <= gridSize; i += 1) {
-      const position = i * cellSize;
-      ctx.beginPath();
-      ctx.moveTo(position, 0);
-      ctx.lineTo(position, orbitCanvas.height);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, position);
-      ctx.lineTo(orbitCanvas.width, position);
-      ctx.stroke();
+    function camera() {
+      return {
+        x: clamp(game.player.x - canvas.width / 2, 0, world.width - canvas.width),
+        y: clamp(game.player.y - canvas.height / 2, 0, world.height - canvas.height)
+      };
     }
-  }
 
-  function drawStars() {
-    stars.forEach((star) => {
-      const point = cellToPoint(star, cellSize);
-      drawDiamond(ctx, point.x, point.y, cellSize * 0.16, '#c9d8ff', '#ffffff', 8);
+    function drawBackground(view) {
+      context.fillStyle = '#09172f';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.strokeStyle = 'rgba(247, 249, 255, 0.06)';
+      context.lineWidth = 1;
+
+      for (let x = -view.x % world.backgroundGrid; x < canvas.width; x += world.backgroundGrid) {
+        context.beginPath();
+        context.moveTo(x, 0);
+        context.lineTo(x, canvas.height);
+        context.stroke();
+      }
+
+      for (let y = -view.y % world.backgroundGrid; y < canvas.height; y += world.backgroundGrid) {
+        context.beginPath();
+        context.moveTo(0, y);
+        context.lineTo(canvas.width, y);
+        context.stroke();
+      }
+    }
+
+    function drawPellets(view) {
+      game.pellets.forEach((pellet, index) => {
+        context.fillStyle = index % 3 === 0 ? '#f7f9ff' : '#2d75ff';
+        context.beginPath();
+        context.arc(pellet.x - view.x, pellet.y - view.y, pellet.radius, 0, Math.PI * 2);
+        context.fill();
+      });
+    }
+
+    function drawRivals(view) {
+      game.rivals.forEach((rival) => {
+        context.fillStyle = rival.radius > game.player.radius ? '#e33a3f' : '#2d75ff';
+        context.beginPath();
+        context.arc(rival.x - view.x, rival.y - view.y, rival.radius, 0, Math.PI * 2);
+        context.fill();
+      });
+    }
+
+    function drawPlayer(view) {
+      context.fillStyle = '#f7f9ff';
+      context.beginPath();
+      context.arc(game.player.x - view.x, game.player.y - view.y, game.player.radius, 0, Math.PI * 2);
+      context.fill();
+
+      context.strokeStyle = 'rgba(7, 14, 28, 0.8)';
+      context.lineWidth = 4;
+      context.stroke();
+    }
+
+    function drawOverlay() {
+      if (game.running && !game.paused && !game.gameOver) {
+        return;
+      }
+
+      const label = game.gameOver ? 'Game over' : game.paused ? 'Paused' : 'Ready to play';
+
+      context.fillStyle = 'rgba(6, 16, 31, 0.5)';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = '#f7f9ff';
+      context.textAlign = 'center';
+      context.textBaseline = 'middle';
+      context.font = '700 22px "Trebuchet MS", sans-serif';
+      context.fillText(label, canvas.width / 2, canvas.height / 2 - 12);
+      context.font = '500 14px "Trebuchet MS", sans-serif';
+      context.fillText('Use arrow keys, WASD, or touch controls', canvas.width / 2, canvas.height / 2 + 18);
+    }
+
+    function draw() {
+      const view = camera();
+      drawBackground(view);
+      drawPellets(view);
+      drawRivals(view);
+      drawPlayer(view);
+      drawOverlay();
+    }
+
+    canvas.addEventListener('pointerdown', () => {
+      state.activeGame = 'agar';
     });
-  }
 
-  function drawPlayer() {
-    const point = cellToPoint(player, cellSize);
-    ctx.save();
-    ctx.shadowColor = '#2d75ff';
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = '#2d75ff';
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, cellSize * 0.28, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    drawCircle(ctx, point.x, point.y, cellSize * 0.11, '#ffffff', '#ffffff', 0);
-  }
-
-  function drawComets() {
-    comets.forEach((comet) => {
-      const point = cellToPoint(comet, cellSize);
-      drawCircle(ctx, point.x, point.y, cellSize * 0.24, '#e33a3f', '#e33a3f', 14);
-      drawCircle(ctx, point.x + 6, point.y - 6, cellSize * 0.08, '#ffffff', '#ffffff', 0);
+    toggleButton.addEventListener('click', () => {
+      state.activeGame = 'agar';
+      if (!game.running || game.paused) {
+        startGame();
+      } else {
+        pauseGame();
+      }
     });
-  }
 
-  function drawGameOver() {
-    if (!gameOver) {
-      return;
-    }
-
-    ctx.fillStyle = 'rgba(5, 13, 28, 0.66)';
-    ctx.fillRect(0, 0, orbitCanvas.width, orbitCanvas.height);
-    ctx.fillStyle = '#eaf6ef';
-    ctx.font = 'bold 30px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Game Over', orbitCanvas.width / 2, orbitCanvas.height / 2 - 6);
-    ctx.font = '16px sans-serif';
-    ctx.fillText('Restart to play again', orbitCanvas.width / 2, orbitCanvas.height / 2 + 24);
-  }
-
-  function draw() {
-    drawBackground();
-    drawStars();
-    drawComets();
-    drawPlayer();
-    drawGameOver();
-  }
-
-  function startLoop() {
-    if (timerId) {
-      return;
-    }
-
-    timerId = window.setInterval(move, speedMs);
-  }
-
-  function stopLoop() {
-    if (!timerId) {
-      return;
-    }
-
-    window.clearInterval(timerId);
-    timerId = null;
-  }
-
-  function startGame() {
-    if (gameOver) {
-      return;
-    }
-
-    started = true;
-    setStatus('Playing');
-    orbitToggle.textContent = 'Pause';
-    startLoop();
-  }
-
-  function pauseGame() {
-    if (!started || gameOver) {
-      return;
-    }
-
-    started = false;
-    stopLoop();
-    setStatus('Paused');
-    orbitToggle.textContent = 'Resume';
-  }
-
-  function toggleGame() {
-    setActiveGame('orbit');
-
-    if (gameOver) {
+    restartButton.addEventListener('click', () => {
+      state.activeGame = 'agar';
       resetGame();
       startGame();
-      return;
-    }
+    });
 
-    if (!started) {
-      startGame();
-    } else {
-      pauseGame();
-    }
-  }
+    bindDirectionButtons('[data-agar-dir]', (name) => setDirection(name), () => {
+      state.activeGame = 'agar';
+    });
 
-  function restartGame() {
-    setActiveGame('orbit');
-    stopLoop();
+    document.addEventListener('keydown', (event) => {
+      if (state.activeGame !== 'agar') {
+        return;
+      }
+
+      routeKeyboard(event, {
+        arrowup: () => setDirection('up'),
+        w: () => setDirection('up'),
+        arrowdown: () => setDirection('down'),
+        s: () => setDirection('down'),
+        arrowleft: () => setDirection('left'),
+        a: () => setDirection('left'),
+        arrowright: () => setDirection('right'),
+        d: () => setDirection('right'),
+        ' ': () => {
+          if (!game.running) {
+            startGame();
+          } else {
+            pauseGame();
+          }
+        }
+      });
+    });
+
     resetGame();
   }
 
-  orbitCanvas.addEventListener('pointerdown', () => setActiveGame('orbit'));
-  orbitRestart.addEventListener('click', restartGame);
-  orbitToggle.addEventListener('click', toggleGame);
-  bindDirectionButtons(orbitTouchButtons, 'orbit', (dirName) => {
-    setDirection(DIRECTIONS[dirName]);
-  });
+  function setupMudGame() {
+    const statusEl = document.getElementById('mud-status');
+    const logEl = document.getElementById('mud-log');
+    const form = document.getElementById('mud-form');
+    const input = document.getElementById('mud-command');
+    const resetButton = document.getElementById('mud-reset');
+    const quickButtons = document.querySelectorAll('[data-mud-command]');
 
-  highScore = readHighScore();
-  orbitHighScore.textContent = String(highScore);
-  resetGame();
+    const rooms = {
+      lobby: {
+        title: 'Lobby',
+        description: 'A tidy lobby with a humming terminal and a glass door to the east that looks locked at first glance.',
+        exits: { north: 'gallery' },
+        item: null
+      },
+      gallery: {
+        title: 'Gallery',
+        description: 'Blue-and-red panels line the wall. A laminated access card rests on a narrow shelf.',
+        exits: { south: 'lobby', east: 'archive' },
+        item: 'access card'
+      },
+      archive: {
+        title: 'Archive',
+        description: 'Shelves of logs and old diagrams surround a sealed door to the east.',
+        exits: { west: 'gallery', east: 'server' },
+        item: 'route note',
+        lockedExit: 'east'
+      },
+      server: {
+        title: 'Server Room',
+        description: 'The server room glows softly. Fans spin up, lights turn green, and the network finally comes alive.',
+        exits: { west: 'archive' },
+        item: null
+      }
+    };
 
-  gameControllers.orbit = {
-    setDirection,
-    toggleGame,
-    restartGame,
-  };
-}
+    const game = {
+      currentRoom: 'lobby',
+      inventory: [],
+      log: [],
+      unlockedServer: false,
+      won: false
+    };
 
-window.addEventListener('keydown', (event) => {
-  const key = event.key.toLowerCase();
-  const controller = gameControllers[activeGame];
+    function render() {
+      logEl.innerHTML = '';
+      game.log.slice(-20).forEach((line) => {
+        const p = document.createElement('p');
+        p.className = `mud-line${line.type ? ` is-${line.type}` : ''}`;
+        p.textContent = line.text;
+        logEl.appendChild(p);
+      });
+      logEl.scrollTop = logEl.scrollHeight;
+      statusEl.textContent = game.won ? 'Complete' : rooms[game.currentRoom].title;
+    }
 
-  if (!controller) {
-    return;
+    function say(text, type = 'system') {
+      game.log.push({ text, type });
+      render();
+    }
+
+    function resetGame() {
+      game.currentRoom = 'lobby';
+      game.inventory = [];
+      game.log = [];
+      game.unlockedServer = false;
+      game.won = false;
+      state.activeGame = 'mud';
+      say('You wake in the lobby. Type "help" to see the available commands.', 'system');
+      describeRoom();
+    }
+
+    function describeRoom() {
+      const room = rooms[game.currentRoom];
+      const exits = Object.keys(room.exits).map((exit) => exit.toUpperCase()).join(', ') || 'none';
+      say(`${room.title}: ${room.description}`, 'system');
+      say(`Exits: ${exits}`, 'system');
+
+      if (room.item) {
+        say(`You can see a ${room.item} here.`, 'success');
+      }
+
+      if (game.currentRoom === 'archive' && !game.unlockedServer) {
+        say('The eastern door is locked. Perhaps a card would help.', 'error');
+      }
+    }
+
+    function updateMudStateLabel(text) {
+      statusEl.textContent = text;
+    }
+
+    function move(direction) {
+      const room = rooms[game.currentRoom];
+      const destination = room.exits[direction];
+      if (!destination) {
+        say('You cannot go that way.', 'error');
+        return;
+      }
+
+      if (game.currentRoom === 'archive' && direction === 'east' && !game.unlockedServer) {
+        say('The east door is locked. You need to use the access card first.', 'error');
+        return;
+      }
+
+      game.currentRoom = destination;
+      say(`You move ${direction}.`, 'success');
+      describeRoom();
+
+      if (game.currentRoom === 'server') {
+        game.won = true;
+        updateMudStateLabel('Complete');
+        say('The server room is open. Mission complete.', 'success');
+      }
+    }
+
+    function take(itemName) {
+      const room = rooms[game.currentRoom];
+      if (!room.item || room.item.toLowerCase() !== itemName) {
+        say(`There is no ${itemName} here.`, 'error');
+        return;
+      }
+
+      game.inventory.push(room.item);
+      say(`You take the ${room.item}.`, 'success');
+      room.item = null;
+    }
+
+    function showInventory() {
+      if (!game.inventory.length) {
+        say('Inventory: empty', 'system');
+        return;
+      }
+
+      say(`Inventory: ${game.inventory.join(', ')}`, 'system');
+    }
+
+    function useItem(itemName) {
+      const hasItem = game.inventory.some((entry) => entry.toLowerCase() === itemName);
+      if (!hasItem) {
+        say(`You do not have ${itemName}.`, 'error');
+        return;
+      }
+
+      if (game.currentRoom === 'archive' && itemName === 'access card') {
+        game.unlockedServer = true;
+        say('You swipe the access card. The eastern door unlocks.', 'success');
+        updateMudStateLabel('Door unlocked');
+        return;
+      }
+
+      say('Nothing obvious happens.', 'system');
+    }
+
+    function help() {
+      say('Commands: look, north, south, east, west, take [item], use [item], inventory, map, help', 'system');
+    }
+
+    function showMap() {
+      say('Map: Lobby -> Gallery -> Archive -> Server Room', 'system');
+    }
+
+    function normaliseCommand(text) {
+      return text.trim().toLowerCase();
+    }
+
+    function handleCommand(rawInput) {
+      const command = normaliseCommand(rawInput);
+      if (!command) {
+        return;
+      }
+
+      say(`> ${command}`, 'system');
+
+      if (command === 'help') {
+        help();
+        return;
+      }
+
+      if (command === 'look') {
+        describeRoom();
+        return;
+      }
+
+      if (command === 'inventory' || command === 'i') {
+        showInventory();
+        return;
+      }
+
+      if (command === 'map') {
+        showMap();
+        return;
+      }
+
+      if (['north', 'south', 'east', 'west'].includes(command)) {
+        move(command);
+        return;
+      }
+
+      if (command.startsWith('take ')) {
+        take(command.slice(5).trim());
+        return;
+      }
+
+      if (command.startsWith('use ')) {
+        useItem(command.slice(4).trim());
+        return;
+      }
+
+      say('I do not understand that command.', 'error');
+    }
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      state.activeGame = 'mud';
+      handleCommand(input.value);
+      input.value = '';
+      input.focus();
+    });
+
+    input.addEventListener('focus', () => {
+      state.activeGame = 'mud';
+    });
+
+    resetButton.addEventListener('click', () => {
+      resetGame();
+      input.focus();
+    });
+
+    quickButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        state.activeGame = 'mud';
+        const command = button.dataset.mudCommand || '';
+        if (command === 'look') {
+          handleCommand('look');
+          input.focus();
+          return;
+        }
+
+        if (command === 'help') {
+          handleCommand('help');
+          input.focus();
+          return;
+        }
+
+        if (command === 'inventory') {
+          handleCommand('inventory');
+          input.focus();
+          return;
+        }
+
+        if (command) {
+          handleCommand(command);
+          input.focus();
+        }
+      });
+    });
+
+    resetGame();
   }
-
-  if (['arrowup', 'w'].includes(key)) {
-    event.preventDefault();
-    controller.setDirection(DIRECTIONS.up);
-  } else if (['arrowdown', 's'].includes(key)) {
-    event.preventDefault();
-    controller.setDirection(DIRECTIONS.down);
-  } else if (['arrowleft', 'a'].includes(key)) {
-    event.preventDefault();
-    controller.setDirection(DIRECTIONS.left);
-  } else if (['arrowright', 'd'].includes(key)) {
-    event.preventDefault();
-    controller.setDirection(DIRECTIONS.right);
-  }
-});
+})();
