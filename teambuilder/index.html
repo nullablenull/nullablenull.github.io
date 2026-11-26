@@ -215,12 +215,18 @@ function newState(captains, players, mode, first){
     roundOrders:[], picks:[], online:{}};
 }
 function totalPicks(s){return s.picks.length + s.pool.length}
+function newRoundOrder(s,r){
+  // 매 라운드 새로 섞되, 직전 라운드와 똑같은 순서는 피함
+  const prev=s.roundOrders[r-1]; let o;
+  for(let k=0;k<20;k++){o=shuffle(s.captains.map((_,x)=>x));if(!prev||o.join()!==prev.join())break}
+  return o;
+}
 function turnCaptain(s){
   if(!s.pool.length) return -1;
   const n=s.captains.length, k=s.picks.length, r=Math.floor(k/n), i=k%n;
   if(s.mode==='snake'){const o=r%2===0?s.order:s.order.slice().reverse();return o[i]}
-  while(s.roundOrders.length<=r) s.roundOrders.push(shuffle(s.captains.map((_,x)=>x)));
-  return s.roundOrders[r][i];
+  if(isHost) while(s.roundOrders.length<=r) s.roundOrders.push(newRoundOrder(s,r));
+  return s.roundOrders[r]?s.roundOrders[r][i]:-2;
 }
 function applyPick(captain, player){
   const t=turnCaptain(state);
@@ -237,6 +243,7 @@ function undo(){
 }
 function broadcast(){
   if(!isHost) return;
+  turnCaptain(state);
   try{localStorage.setItem(LS,JSON.stringify({code:currentCode,pin:hostPin,state}))}catch(e){}
   conns.forEach(c=>c.open&&c.send({t:'state',state}));
   render();
@@ -340,6 +347,8 @@ function canPickFor(c){return isHost&&me===''? true : me!==''&&+me===c}
 function render(){
   if(!state) return;
   const t=turnCaptain(state);
+  if(t===-2) return;
+  if(state.mode!=='snake'){const r=Math.floor(state.picks.length/state.captains.length),o=state.roundOrders[r];if(o)$('modeInfo').textContent=`매 라운드 랜덤 · ${r+1}라운드 순서: `+o.map(i=>state.captains[i]).join(' → ')}
   if(t<0){show('result');renderResult();return}
   show('draft');
   const st=$('status'); const mine=canPickFor(t)&&me!=='';
@@ -442,11 +451,16 @@ $('btnShare').onclick=async()=>{
   let saved=null; try{saved=JSON.parse(localStorage.getItem(LS))}catch(e){}
   if(saved&&saved.code&&((code===saved.code&&sessionStorage.getItem('futsalHosting')===code)||!code)){ startHost(saved.code,saved.pin,saved.state); return; }
   if(/^\d{6}$/.test(code)){
-    $('jCode').value=code;
+    $('tabJoin').click();$('jCode').value=code;setTimeout(()=>$('jPin').focus(),0);
     const pin=hpin||localStorage.getItem('futsalPin_'+code);
     if(pin){$('jPin').value=pin;join(code,pin)}
   }
 })();
+window.addEventListener('hashchange',()=>{
+  if(state) return;
+  const [code,pin]=location.hash.slice(1).split('-');
+  if(/^\d{6}$/.test(code)){$('tabJoin').click();$('jCode').value=code;if(pin){$('jPin').value=pin;join(code,pin)}else $('jPin').focus()}
+});
 </script>
 </body>
 </html>
