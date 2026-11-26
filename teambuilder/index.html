@@ -234,7 +234,8 @@ const INCLUDE_SECTIONS=['참석','늦참'];
 function extractNames(text){
   // 카톡 투표 현황: 섹션(참석/불참/늦참/카풀지원…)별로 "이름/년도/동" 이 두 열로 나옴
   // → 참석·늦참 섹션의 이름만 추출. 섹션 제목을 못 찾으면 전체 추출.
-  const NAME=/([가-힣]{2,5}|[A-Za-z]{2,12})\s*[\/／]\s*\d/g;
+  // 이름 뒤 구분자(/)가 1·l·|·공백으로 오인식되거나 '동'이 없는 경우(오승웅/83/109)도 허용
+  const NAME=/([가-힣]{2,5}|[A-Za-z]{2,12})\s*(?:[\/／]\s*\d|[1lI|]?\s*\d{2}\s*[\/／1lI|]\s*\d{2,3})/g;
   let section=null, found=false; const picked=[], all=[];
   for(const raw of text.replace(/[|｜]/g,'/').split('\n')){
     const names=[...raw.matchAll(NAME)].map(m=>m[1]);
