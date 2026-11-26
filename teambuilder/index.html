@@ -218,16 +218,25 @@ async function runOcr(files){
     const cur=parseNames($('cPlayers').value);
     const merged=[...new Set([...cur,...names])];
     $('cPlayers').value=merged.join('\n');
-    st.textContent=`${names.length}명 추출됨. 잘못 인식된 이름은 직접 수정해 주세요.`;
+    st.textContent=`참석·늦참 ${[...new Set(names)].length}명 추출됨. 잘못 인식된 이름은 직접 수정해 주세요.`;
   }catch(err){console.error(err);st.textContent='이미지 인식 실패: '+err}
 }
+const INCLUDE_SECTIONS=['참석','늦참'];
 function extractNames(text){
-  // 카톡 투표 캡처: "주요한/87/125동  강준성/85/114동" 처럼 한 줄에 여러 명이 올 수 있음
-  const t=text.replace(/[|｜]/g,'/');
-  const hits=[...t.matchAll(/([가-힣]{2,5}|[A-Za-z]{2,12})\s*[\/／]\s*\d/g)].map(m=>m[1]);
-  if(hits.length) return hits;
+  // 카톡 투표 현황: 섹션(참석/불참/늦참/카풀지원…)별로 "이름/년도/동" 이 두 열로 나옴
+  // → 참석·늦참 섹션의 이름만 추출. 섹션 제목을 못 찾으면 전체 추출.
+  const NAME=/([가-힣]{2,5}|[A-Za-z]{2,12})\s*[\/／]\s*\d/g;
+  let section=null, found=false; const picked=[], all=[];
+  for(const raw of text.replace(/[|｜]/g,'/').split('\n')){
+    const names=[...raw.matchAll(NAME)].map(m=>m[1]);
+    if(names.length){all.push(...names); if(section&&INCLUDE_SECTIONS.includes(section)) picked.push(...names); continue}
+    const h=raw.replace(/[^가-힣]/g,'');
+    if(h&&h.length<=6&&!/투표|현황|항목|멤버|종료|선택|사람|없어/.test(h)){ section=h; if(INCLUDE_SECTIONS.some(k=>h.startsWith(k))){section=INCLUDE_SECTIONS.find(k=>h.startsWith(k));found=true} }
+  }
+  if(found) return picked;
+  if(all.length) return all;
   const stop=/(투표|참석|불참|미정|명|마감|복수|익명|선택|항목|결과|오후|오전|카카오|메시지|전체|보기|완료|진행|:|\d{1,2}:\d{2}|%)/;
-  return t.split('\n').flatMap(l=>l.split(/[,·•]/)).map(l=>l.split(/[\/／]/)[0]).map(l=>l.replace(/[^\p{L}\p{N} ]/gu,'').trim())
+  return text.split('\n').flatMap(l=>l.split(/[,·•]/)).map(l=>l.split(/[\/／]/)[0]).map(l=>l.replace(/[^\p{L}\p{N} ]/gu,'').trim())
     .filter(l=>l && l.length>=2 && l.length<=10 && !stop.test(l) && !/^\d+$/.test(l))
     .map(l=>l.replace(/\s+/g,''));
 }
