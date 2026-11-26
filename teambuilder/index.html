@@ -68,6 +68,9 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .msg.sys{max-width:100%;text-align:center;font-size:12px;color:var(--muted)}
 #chatForm{display:flex;gap:6px;padding:8px;border-top:1px solid var(--line)}
 #chatForm input{flex:1;padding:9px}#chatForm button{padding:9px 12px}
+#pickBar{position:sticky;bottom:0;z-index:70;background:var(--navy);color:#fff;border-radius:14px 14px 0 0;padding:12px 16px;display:flex;gap:10px;align-items:center;box-shadow:0 -6px 16px #071f5c33;border-top:3px solid var(--red)}
+#pickBar .nm{flex:1;font-weight:800;font-size:17px}
+#pickBar button{flex:0 0 auto}
 #resultCanvas{max-width:100%;border-radius:12px;display:block;margin:10px auto}
 </style>
 </head>
@@ -135,9 +138,10 @@ button:disabled{opacity:.4;cursor:not-allowed}
     <div id="status" class="status"></div>
     <div id="teams" class="teams"></div>
     <div class="card"><h2>남은 선수 <span id="leftCnt" class="muted"></span></h2>
-      <div class="muted" style="margin-bottom:6px">선수를 끌어서 내 팀 칸에 놓으세요 (탭 → 팀 탭도 가능)</div>
+      <div class="muted" style="margin-bottom:6px">선수를 끌어서 내 팀 칸에 놓거나, 선수를 탭해서 고른 뒤 아래 <b>선택</b> 버튼을 누르세요</div>
       <div id="pool"></div>
     </div>
+    <div id="pickBar" class="hidden"><div class="nm" id="pickName"></div><button class="sec" id="pickCancel">취소</button><button class="bad" id="pickOk">선택</button></div>
   </section>
 
   <div id="roleModal" class="modal hidden"><div class="card">
@@ -410,11 +414,21 @@ function render(){
   $('leftCnt').textContent=`(${state.pool.length}명)`;
   $('pool').innerHTML=state.pool.map(p=>`<span class="chip pchip" data-p="${esc(p)}">${esc(p)}</span>`).join('');
   document.querySelectorAll('.pchip').forEach(el=>bindDrag(el));
-  document.querySelectorAll('.team').forEach(el=>el.onclick=()=>{if(selected){tryDrop(+el.dataset.team,selected);selected=null}});
+  setSelected(selected&&state.pool.includes(selected)?selected:null);
+  document.querySelectorAll('.team').forEach(el=>el.onclick=()=>{if(selected){const p=selected;setSelected(null);tryDrop(+el.dataset.team,p)}});
 }
 
 // pointer-based drag (works on mouse + touch)
 let selected=null;
+function setSelected(p){
+  selected=p;
+  document.querySelectorAll('.pchip').forEach(x=>x.classList.toggle('mine',x.dataset.p===p));
+  const t=turnCaptain(state), can=p&&t>=0&&canPickFor(t);
+  $('pickBar').classList.toggle('hidden',!p);
+  if(p){$('pickName').textContent=`${p} → ${state.captains[t]} 팀`;$('pickOk').disabled=!can;$('pickOk').textContent=can?'선택':(state.captains[t]+' 차례')}
+}
+$('pickCancel').onclick=()=>setSelected(null);
+$('pickOk').onclick=()=>{if(!selected)return;const p=selected;setSelected(null);tryDrop(turnCaptain(state),p)};
 function tryDrop(team,p){
   const t=turnCaptain(state);
   if(team!==t) return toast('지금은 '+state.captains[t]+' 차례입니다');
@@ -438,7 +452,7 @@ function bindDrag(el){
       if(ghost){ghost.remove(); if(over){over.classList.remove('over');tryDrop(+over.dataset.team,p)}}
       else{ // tap: select
         document.querySelectorAll('.pchip').forEach(x=>x.classList.remove('mine'));
-        if(selected===p) selected=null; else {selected=p;el.classList.add('mine');toast(p+' 선택됨 → 팀 칸을 탭하세요')}
+        setSelected(selected===p?null:p);
       }
     };
     window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
