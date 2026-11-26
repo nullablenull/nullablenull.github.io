@@ -215,6 +215,17 @@ document.addEventListener('paste',e=>{
   const files=[...(e.clipboardData?.items||[])].filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile());
   if(files.length){e.preventDefault();runOcr(files)}
 });
+async function enhance(file){
+  const img=await createImageBitmap(file);
+  const sc=Math.min(2,3000/img.width), c=document.createElement('canvas');
+  c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc);
+  const g=c.getContext('2d'); g.imageSmoothingQuality='high'; g.drawImage(img,0,0,c.width,c.height);
+  const d=g.getImageData(0,0,c.width,c.height), a=d.data; let lo=255,hi=0;
+  for(let i=0;i<a.length;i+=4){const v=a[i]*.299+a[i+1]*.587+a[i+2]*.114;a[i]=v;if(v<lo)lo=v;if(v>hi)hi=v}
+  const k=255/Math.max(1,hi-lo);
+  for(let i=0;i<a.length;i+=4){const v=(a[i]-lo)*k;a[i]=a[i+1]=a[i+2]=v}
+  g.putImageData(d,0,0); return c;
+}
 async function runOcr(files){
   if(!files.length) return;
   const st=$('ocrStatus'); st.textContent='OCR 엔진 불러오는 중… (처음 한 번은 수십 초 걸릴 수 있어요)';
@@ -222,7 +233,14 @@ async function runOcr(files){
     if(!window.Tesseract) await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js';s.onload=ok;s.onerror=no;document.head.appendChild(s)});
     const worker=await Tesseract.createWorker(['kor','eng'],1,{logger:m=>{if(m.status==='recognizing text')st.textContent=`인식 중… ${Math.round(m.progress*100)}%`}});
     let names=[];
-    for(const f of files){const {data}=await worker.recognize(f);names.push(...extractNames(data.text))}
+    // 작은 글씨 오인식 보정: 원본 + 2배 확대·흑백·대비 보정본을 각각 인식해 합침
+    for(const [k,f] of files.entries()){
+      st.textContent=`이미지 ${k+1}/${files.length} 인식 중… (1/2)`;
+      names.push(...extractNames((await worker.recognize(f)).data.text));
+      st.textContent=`이미지 ${k+1}/${files.length} 인식 중… (2/2)`;
+      names.push(...extractNames((await worker.recognize(await enhance(f))).data.text));
+    }
+    names=[...new Set(names)];
     await worker.terminate();
     const cur=parseNames($('cPlayers').value);
     const merged=[...new Set([...cur,...names])];
@@ -235,7 +253,7 @@ function extractNames(text){
   // 카톡 투표 현황: 섹션(참석/불참/늦참/카풀지원…)별로 "이름/년도/동" 이 두 열로 나옴
   // → 참석·늦참 섹션의 이름만 추출. 섹션 제목을 못 찾으면 전체 추출.
   // 이름 뒤 구분자(/)가 1·l·|·공백으로 오인식되거나 '동'이 없는 경우(오승웅/83/109)도 허용
-  const NAME=/([가-힣]{2,5}|[A-Za-z]{2,12})\s*(?:[\/／]\s*\d|[1lI|]?\s*\d{2}\s*[\/／1lI|]\s*\d{2,3})/g;
+  const NAME=/([가-힣]{2,5}|[A-Za-z]{2,12})\s*(?:[\/／]\s*\(?\d|[1lI|]?\s*\d{2}\s*[\/／1lI|]\s*\d{2,3})/g;
   let section=null, found=false; const picked=[], all=[];
   for(const raw of text.replace(/[|｜]/g,'/').split('\n')){
     const names=[...raw.matchAll(NAME)].map(m=>m[1]);
