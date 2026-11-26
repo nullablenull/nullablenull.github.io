@@ -51,6 +51,10 @@ button:disabled{opacity:.4;cursor:not-allowed}
 .status.my{background:var(--red)}
 .code{font-size:28px;letter-spacing:6px;font-weight:900;color:var(--blue)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:#fff;padding:11px 18px;border-radius:10px;z-index:100;font-weight:600}
+.modal{position:fixed;inset:0;background:#071f5ccc;display:flex;align-items:center;justify-content:center;z-index:90;padding:16px}
+.modal .card{width:100%;max-width:380px;margin:0}
+.modal button{width:100%;margin-top:8px;font-size:17px;padding:14px}
+.modal button.taken{background:#e8eefb;color:var(--muted)}
 #resultCanvas{max-width:100%;border-radius:12px;display:block;margin:10px auto}
 </style>
 </head>
@@ -105,13 +109,13 @@ button:disabled{opacity:.4;cursor:not-allowed}
         <div id="hostInfo" class="hidden"><div class="muted">PIN</div><div class="code" id="dPin"></div></div>
         <div style="flex:2">
           <label style="margin-top:0">나는</label>
-          <select id="meSel"></select>
+          <div class="row"><select id="meSel" style="flex:3"></select><button class="sec" id="btnRole" style="flex:1">변경</button></div>
           <div class="muted" id="modeInfo" style="margin-top:6px"></div>
         </div>
       </div>
       <div class="row hidden" id="hostCtl" style="margin-top:10px">
         <button class="sec" id="btnUndo">↶ 되돌리기</button>
-        <button class="sec" id="btnShare">🔗 링크 복사</button>
+        <button class="sec" id="btnShare">📤 초대 공유</button>
         <button class="bad" id="btnReset">처음부터</button>
       </div>
     </div>
@@ -122,6 +126,11 @@ button:disabled{opacity:.4;cursor:not-allowed}
       <div id="pool"></div>
     </div>
   </section>
+
+  <div id="roleModal" class="modal hidden"><div class="card">
+    <h2>내 역할 선택</h2><div class="muted">팀장이라면 내 이름을 눌러주세요.</div>
+    <div id="roleBtns"></div>
+  </div></div>
 
   <!-- RESULT -->
   <section id="result" class="hidden">
@@ -147,7 +156,7 @@ const $ = id => document.getElementById(id);
 const PREFIX = 'nn-futsal-draft-';
 const LS = 'futsalHost';
 let peer, isHost = false, state = null, hostPin = '', conns = [], hostConn = null;
-let me = localStorage.getItem('futsalMe') || '';
+let me = '';
 
 function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2200)}
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
@@ -238,7 +247,7 @@ let currentCode='';
 function startHost(code,pin,s){
   isHost=true; hostPin=pin; state=s; currentCode=code;
   peer=new Peer(PREFIX+code);
-  peer.on('open',()=>{enterDraft();broadcast();history.replaceState(null,'','#'+code)});
+  peer.on('open',()=>{sessionStorage.setItem('futsalHosting',code);me=sessionStorage.getItem('futsalMe_'+code)??'';enterDraft();broadcast();history.replaceState(null,'','#'+code)});
   peer.on('error',err=>{
     if(err.type==='unavailable-id'){toast('코드 충돌 — 잠시 후 다시 시도');}
     else toast('연결 오류: '+err.type);
@@ -274,7 +283,7 @@ function join(code,pin){
       else if(d.t==='err') toast(d.m);
       else if(d.t==='state'){
         const first=!state; state=d.state;
-        if(first){enterDraft();localStorage.setItem('futsalPin_'+code,pin);history.replaceState(null,'','#'+code);if(me!=='')hostConn.send({t:'claim',me})}
+        if(first){me=sessionStorage.getItem('futsalMe_'+code)??'';localStorage.setItem('futsalPin_'+code,pin);history.replaceState(null,'','#'+code);enterDraft();if(me!=='')hostConn.send({t:'claim',me});else openRole()}
         render();
       }
     });
@@ -307,10 +316,23 @@ function enterDraft(){
   const sel=$('meSel'); sel.innerHTML='<option value="">관전자</option>'+state.captains.map((c,i)=>`<option value="${i}">팀장: ${esc(c)}</option>`).join('');
   if(me!==''&&+me<state.captains.length) sel.value=me; else me='';
   if(isHost&&me==='') { sel.options[0].textContent='진행자 (모든 팀 대리 선택 가능)'; }
-  sel.onchange=()=>{me=sel.value;localStorage.setItem('futsalMe',me);if(hostConn)hostConn.send({t:'claim',me});if(isHost)updateOnline();render()};
+  sel.onchange=()=>setMe(sel.value);
+  $('btnRole').onclick=openRole;
   $('modeInfo').textContent=state.mode==='snake'
     ?'스네이크: '+state.order.map(i=>state.captains[i]).join(' → ')+' → 역순'
     :'매 라운드마다 순서를 랜덤으로 정합니다';
+}
+function setMe(v){
+  me=String(v); $('meSel').value=me; sessionStorage.setItem('futsalMe_'+currentCode,me);
+  if(hostConn)hostConn.send({t:'claim',me}); if(isHost)updateOnline();
+  $('roleModal').classList.add('hidden'); render();
+}
+function openRole(){
+  const on=state.online||{};
+  $('roleBtns').innerHTML=state.captains.map((c,i)=>`<button data-i="${i}" class="${on[i]&&String(i)!==me?'taken':''}">👑 ${esc(c)}${on[i]&&String(i)!==me?' (접속 중)':''}</button>`).join('')
+    +`<button class="sec" data-i="">${isHost?'진행자 (모든 팀 대리 선택)':'관전자'}</button>`;
+  $('roleBtns').querySelectorAll('button').forEach(b=>b.onclick=()=>setMe(b.dataset.i));
+  $('roleModal').classList.remove('hidden');
 }
 function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
@@ -370,8 +392,9 @@ function bindDrag(el){
 // ---------- result ----------
 const COLORS=['#0a3ca0','#d71920','#071f5c','#1f7ae0','#9b1117','#334155','#0e7490','#b45309'];
 function dateStr(){const d=new Date();return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`}
+const sorted=i=>state.teams[i].slice().sort((a,b)=>a.localeCompare(b,'ko'));
 function resultText(){
-  return `⚽ 풋살 팀 구성 (${dateStr()})\n\n`+state.captains.map((c,i)=>`[${c} 팀] ${state.teams[i].length+1}명\n👑 ${c}\n`+state.teams[i].map((p,j)=>`${j+1}. ${p}`).join('\n')).join('\n\n');
+  return `⚽ 풋살 팀 구성 (${dateStr()})\n\n`+state.captains.map((c,i)=>`[${c} 팀]\n👑 ${c}\n`+sorted(i).join('\n')).join('\n\n');
 }
 function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&document.fonts.ready.then(()=>renderResult());}
   $('resultText').value=resultText();
@@ -389,9 +412,8 @@ function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&doc
     g.fillStyle='#ffffff';rr(g,x,y,colW,boxH,14);g.fill();
     g.fillStyle=col;rr(g,x,y,colW,headH-10,14);g.fill();g.fillRect(x,y+30,colW,headH-40);
     g.fillStyle='#fff';g.font=`800 22px ${F}`;g.textAlign='left';g.fillText(c+' 팀',x+16,y+38);
-    g.font=`14px ${F}`;g.textAlign='right';g.fillText((state.teams[i].length+1)+'명',x+colW-16,y+38);
     g.textAlign='left';g.font=`600 19px ${F}`;
-    [('👑 '+c),...state.teams[i].map((p,j)=>(j+1)+'. '+p)].forEach((line,j)=>{g.fillStyle=j?'#0b1b3f':'#d71920';g.fillText(line,x+18,y+headH+24+j*lineH)});
+    [('👑 '+c),...sorted(i)].forEach((line,j)=>{g.fillStyle=j?'#0b1b3f':'#d71920';g.fillText(line,x+18,y+headH+24+j*lineH)});
   });
 }
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
@@ -399,24 +421,29 @@ function download(name,url){const a=document.createElement('a');a.href=url;a.dow
 $('btnPng').onclick=()=>download(`futsal-${dateStr()}.png`,$('resultCanvas').toDataURL('image/png'));
 $('btnCopy').onclick=()=>{navigator.clipboard.writeText(resultText()).then(()=>toast('복사됨'),()=>{$('resultText').select();document.execCommand('copy');toast('복사됨')})};
 $('btnHtml').onclick=()=>{
-  const body=state.captains.map((c,i)=>`<div class="t" style="border-top:8px solid ${COLORS[i%COLORS.length]}"><h2>${esc(c)} 팀 <small>${state.teams[i].length+1}명</small></h2><ol><li class="cap">👑 ${esc(c)}</li>${state.teams[i].map(p=>`<li>${esc(p)}</li>`).join('')}</ol></div>`).join('');
-  const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>풋살 팀 ${dateStr()}</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"><style>body{font-family:Pretendard,sans-serif;background:#f3f5fa;color:#0b1b3f;margin:0;padding:16px}h1{text-align:center}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:1000px;margin:auto}.t{background:#fff;box-shadow:0 2px 8px #0001;border-radius:12px;padding:12px}small{color:#6b7a99;font-size:13px}ol{padding-left:20px;line-height:1.9}.cap{list-style:none;margin-left:-20px;color:#d71920;font-weight:700}h1{color:#071f5c}</style></head><body><h1>⚽ 풋살 팀 (${dateStr()})</h1><div class="g">${body}</div></body></html>`;
+  const body=state.captains.map((c,i)=>`<div class="t" style="border-top:8px solid ${COLORS[i%COLORS.length]}"><h2>${esc(c)} 팀</h2><ul><li class="cap">👑 ${esc(c)}</li>${sorted(i).map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`).join('');
+  const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>풋살 팀 ${dateStr()}</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"><style>body{font-family:Pretendard,sans-serif;background:#f3f5fa;color:#0b1b3f;margin:0;padding:16px}h1{text-align:center}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:1000px;margin:auto}.t{background:#fff;box-shadow:0 2px 8px #0001;border-radius:12px;padding:12px}small{color:#6b7a99;font-size:13px}ul{list-style:none;padding-left:4px;line-height:1.9}.cap{color:#d71920;font-weight:700}h1{color:#071f5c}</style></head><body><h1>⚽ 풋살 팀 (${dateStr()})</h1><div class="g">${body}</div></body></html>`;
   download(`futsal-${dateStr()}.html`,URL.createObjectURL(new Blob([html],{type:'text/html'})));
 };
 
 // ---------- host controls ----------
 [$('btnUndo'),$('btnUndo2')].forEach(b=>b.onclick=()=>undo());
 [$('btnReset'),$('btnReset2')].forEach(b=>b.onclick=()=>{if(confirm('세션을 종료하고 처음으로 돌아갈까요?')){localStorage.removeItem(LS);location.href=location.pathname}});
-$('btnShare').onclick=()=>{navigator.clipboard.writeText(location.origin+location.pathname+'#'+currentCode).then(()=>toast('링크 복사됨 (PIN은 따로 알려주세요)'))};
+$('btnShare').onclick=async()=>{
+  const url=location.origin+location.pathname+'#'+currentCode+'-'+hostPin;
+  const text=`⚽ 풋살 팀 드래프트 초대\n링크: ${url}\n세션 코드: ${currentCode}\nPIN: ${hostPin}`;
+  if(navigator.share){try{await navigator.share({title:'풋살 팀 드래프트',text});return}catch(e){if(e.name==='AbortError')return}}
+  try{await navigator.clipboard.writeText(text);toast('링크·코드·PIN 복사됨')}catch(e){prompt('아래 내용을 복사하세요',text)}
+};
 
 // ---------- boot ----------
 (function boot(){
-  const code=location.hash.slice(1);
+  const [code,hpin]=location.hash.slice(1).split('-');
   let saved=null; try{saved=JSON.parse(localStorage.getItem(LS))}catch(e){}
-  if(saved&&saved.code&&(code===saved.code||!code)){ startHost(saved.code,saved.pin,saved.state); return; }
+  if(saved&&saved.code&&((code===saved.code&&sessionStorage.getItem('futsalHosting')===code)||!code)){ startHost(saved.code,saved.pin,saved.state); return; }
   if(/^\d{6}$/.test(code)){
     $('jCode').value=code;
-    const pin=localStorage.getItem('futsalPin_'+code);
+    const pin=hpin||localStorage.getItem('futsalPin_'+code);
     if(pin){$('jPin').value=pin;join(code,pin)}
   }
 })();
