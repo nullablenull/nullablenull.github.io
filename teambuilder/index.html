@@ -105,6 +105,7 @@ button:disabled{opacity:.4;cursor:not-allowed}
       <label id="cFirstLbl">스네이크 1라운드 순서</label>
       <select id="cFirst"><option value="input">입력한 순서대로</option><option value="shuffle">랜덤으로 정하기</option></select>
       <label>참가 명단 (한 줄에 한 명 또는 쉼표로 구분 — 팀장은 자동 제외)</label>
+      <div id="cCount" class="muted" style="margin:-2px 0 6px;font-weight:700;color:var(--blue)"></div>
       <textarea id="cPlayers" placeholder="김준홍&#10;이상민&#10;홍정호&#10;고종현&#10;이건희&#10;르본&#10;박현빈&#10;고승범&#10;강성진&#10;강현묵&#10;루이스"></textarea>
       <div class="row" style="margin-top:8px">
         <button class="sec" id="btnOcr">📷 캡처 파일 업로드</button>
@@ -189,6 +190,14 @@ function show(id){['home','draft','result'].forEach(s=>$(s).classList.toggle('hi
 
 // ---------- tabs ----------
 const syncFirst=()=>{const off=$('cMode').value!=='snake';$('cFirst').disabled=off;$('cFirstLbl').style.opacity=off?.4:1};$('cMode').onchange=syncFirst;syncFirst();
+function updateCount(){
+  const caps=parseNames($('cCaptains').value), all=parseNames($('cPlayers').value), pl=all.filter(p=>!caps.includes(p));
+  const dup=all.length-pl.length, total=pl.length+caps.length;
+  let t=`선수 ${pl.length}명`+(dup?` (팀장 ${dup}명 제외)`:'')+` · 팀장 ${caps.length}명 · 총 ${total}명`;
+  if(caps.length>=2&&pl.length){const n=caps.length,q=Math.floor(total/n),m=total%n;t+=` → 팀당 ${m?q+'~'+(q+1):q}명`}
+  $('cCount').textContent=t;
+}
+['cPlayers','cCaptains'].forEach(id=>$(id).addEventListener('input',updateCount));updateCount();
 $('tabJoin').onclick=()=>{$('joinBox').classList.remove('hidden');$('createBox').classList.add('hidden');$('tabJoin').className='';$('tabCreate').className='sec'};
 $('tabCreate').onclick=()=>{$('createBox').classList.remove('hidden');$('joinBox').classList.add('hidden');$('tabCreate').className='';$('tabJoin').className='sec'};
 
@@ -217,7 +226,7 @@ async function runOcr(files){
     await worker.terminate();
     const cur=parseNames($('cPlayers').value);
     const merged=[...new Set([...cur,...names])];
-    $('cPlayers').value=merged.join('\n');
+    $('cPlayers').value=merged.join('\n');updateCount();
     st.textContent=`참석·늦참 ${[...new Set(names)].length}명 추출됨. 잘못 인식된 이름은 직접 수정해 주세요.`;
   }catch(err){console.error(err);st.textContent='이미지 인식 실패: '+err}
 }
