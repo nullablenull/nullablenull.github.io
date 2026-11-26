@@ -1,10 +1,400 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>nullablenull</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>풋살 팀 드래프트</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<style>
+:root{--bg:#0f172a;--card:#1e293b;--line:#334155;--text:#e2e8f0;--muted:#94a3b8;--accent:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;-webkit-user-select:none;user-select:none}
+input,textarea,select{-webkit-user-select:text;user-select:text}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:8px 0 16px}
+h2{font-size:17px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input,textarea,select{width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0b1220;color:var(--text);font-size:15px}
+textarea{min-height:120px;resize:vertical}
+button{background:var(--accent);color:#04210f;border:0;border-radius:8px;padding:10px 14px;font-size:15px;font-weight:700;cursor:pointer}
+button.sec{background:#475569;color:var(--text)}
+button.bad{background:var(--bad);color:#fff}
+button:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>*{flex:1}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabs button{flex:1}
+.hidden{display:none!important}
+.muted{color:var(--muted);font-size:13px}
+.pill{display:inline-block;padding:3px 10px;border-radius:999px;background:#0b1220;border:1px solid var(--line);font-size:13px;margin:2px}
+.teams{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+.team{background:var(--card);border:2px solid var(--line);border-radius:12px;padding:10px;min-height:150px;transition:.15s}
+.team.turn{border-color:var(--accent);box-shadow:0 0 0 3px #22c55e44}
+.team.over{background:#14532d}
+.team h3{margin:0 0 4px;font-size:16px;display:flex;justify-content:space-between;align-items:center}
+.team .badge{font-size:11px;background:var(--accent);color:#04210f;border-radius:6px;padding:2px 6px}
+.team .on{font-size:11px;color:var(--muted)}
+.chip{display:inline-block;padding:8px 12px;margin:4px;border-radius:999px;background:#334155;font-size:15px;cursor:grab;touch-action:none}
+.team .chip{display:block;cursor:default;background:#0b1220;margin:4px 0;border-radius:8px}
+.chip.mine{background:#2563eb}
+.ghost{position:fixed;pointer-events:none;z-index:99;opacity:.9;transform:translate(-50%,-50%) scale(1.1)}
+.status{font-size:16px;font-weight:700;padding:12px;border-radius:10px;background:#0b1220;border:1px solid var(--line);margin-bottom:12px;text-align:center}
+.status.my{background:#14532d;border-color:var(--accent)}
+.code{font-size:28px;letter-spacing:6px;font-weight:800;color:var(--accent)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#000c;padding:10px 16px;border-radius:8px;z-index:100}
+#resultCanvas{max-width:100%;border-radius:10px;display:block;margin:10px auto}
+</style>
 </head>
 <body>
+<div class="wrap">
+  <h1>⚽ 풋살 팀 드래프트</h1>
+
+  <!-- HOME -->
+  <section id="home">
+    <div class="tabs">
+      <button id="tabJoin">세션 참가</button>
+      <button id="tabCreate" class="sec">세션 만들기</button>
+    </div>
+
+    <div id="joinBox" class="card">
+      <h2>세션 참가 (팀장 / 관전)</h2>
+      <label>세션 코드</label><input id="jCode" inputmode="numeric" maxlength="6" placeholder="6자리 숫자">
+      <label>PIN</label><input id="jPin" type="password" inputmode="numeric" placeholder="PIN">
+      <div style="margin-top:12px"><button id="btnJoin" style="width:100%">접속</button></div>
+    </div>
+
+    <div id="createBox" class="card hidden">
+      <h2>세션 만들기 (진행자)</h2>
+      <label>PIN (참가자에게 알려줄 비밀번호)</label><input id="cPin" inputmode="numeric" placeholder="예: 1234">
+      <label>팀장 이름 (한 줄에 한 명, 2명 이상)</label>
+      <textarea id="cCaptains" style="min-height:80px" placeholder="철수&#10;영희&#10;민수"></textarea>
+      <label>뽑는 순서</label>
+      <select id="cMode">
+        <option value="snake">스네이크 (1,2,3,3,2,1 …)</option>
+        <option value="random">매 라운드 순서 랜덤</option>
+      </select>
+      <label>스네이크 1라운드 순서</label>
+      <select id="cFirst"><option value="input">입력한 순서대로</option><option value="shuffle">랜덤으로 정하기</option></select>
+      <label>참가 명단 (한 줄 또는 쉼표로 구분 — 팀장은 자동 제외)</label>
+      <textarea id="cPlayers" placeholder="홍길동&#10;김철수, 이영희"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="sec" id="btnOcr">📷 카톡 투표 캡처에서 추출</button>
+      </div>
+      <input id="ocrFile" type="file" accept="image/*" multiple class="hidden">
+      <div id="ocrStatus" class="muted" style="margin-top:6px"></div>
+      <div style="margin-top:14px"><button id="btnCreate" style="width:100%">세션 시작</button></div>
+      <p class="muted">진행자 기기가 세션 서버 역할을 합니다. 드래프트가 끝날 때까지 이 화면을 닫지 마세요. (새로고침 시 같은 코드로 자동 복구)</p>
+    </div>
+  </section>
+
+  <!-- DRAFT -->
+  <section id="draft" class="hidden">
+    <div class="card" id="infoCard">
+      <div class="row" style="align-items:flex-start">
+        <div><div class="muted">세션 코드</div><div class="code" id="dCode">------</div></div>
+        <div id="hostInfo" class="hidden"><div class="muted">PIN</div><div class="code" id="dPin"></div></div>
+        <div style="flex:2">
+          <label style="margin-top:0">나는</label>
+          <select id="meSel"></select>
+          <div class="muted" id="modeInfo" style="margin-top:6px"></div>
+        </div>
+      </div>
+      <div class="row hidden" id="hostCtl" style="margin-top:10px">
+        <button class="sec" id="btnUndo">↶ 되돌리기</button>
+        <button class="sec" id="btnShare">🔗 링크 복사</button>
+        <button class="bad" id="btnReset">처음부터</button>
+      </div>
+    </div>
+    <div id="status" class="status"></div>
+    <div id="teams" class="teams"></div>
+    <div class="card"><h2>남은 선수 <span id="leftCnt" class="muted"></span></h2>
+      <div class="muted" style="margin-bottom:6px">선수를 끌어서 내 팀 칸에 놓으세요 (탭 → 팀 탭도 가능)</div>
+      <div id="pool"></div>
+    </div>
+  </section>
+
+  <!-- RESULT -->
+  <section id="result" class="hidden">
+    <div class="card">
+      <h2>🎉 팀 구성 완료</h2>
+      <canvas id="resultCanvas"></canvas>
+      <div class="row" style="margin-top:10px">
+        <button id="btnPng">🖼 이미지 저장</button>
+        <button class="sec" id="btnCopy">📋 텍스트 복사</button>
+        <button class="sec" id="btnHtml">📄 HTML 저장</button>
+      </div>
+      <label>텍스트</label><textarea id="resultText" readonly style="min-height:200px"></textarea>
+      <div class="row hidden" id="resHostCtl" style="margin-top:10px">
+        <button class="sec" id="btnUndo2">↶ 마지막 픽 되돌리기</button>
+        <button class="bad" id="btnReset2">새 드래프트</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const PREFIX = 'nn-futsal-draft-';
+const LS = 'futsalHost';
+let peer, isHost = false, state = null, hostPin = '', conns = [], hostConn = null;
+let me = localStorage.getItem('futsalMe') || '';
+
+function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2200)}
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function parseNames(s){return [...new Set(s.split(/[\n,]+/).map(x=>x.trim()).filter(Boolean))]}
+function show(id){['home','draft','result'].forEach(s=>$(s).classList.toggle('hidden',s!==id))}
+
+// ---------- tabs ----------
+$('tabJoin').onclick=()=>{$('joinBox').classList.remove('hidden');$('createBox').classList.add('hidden');$('tabJoin').className='';$('tabCreate').className='sec'};
+$('tabCreate').onclick=()=>{$('createBox').classList.remove('hidden');$('joinBox').classList.add('hidden');$('tabCreate').className='';$('tabJoin').className='sec'};
+
+// ---------- OCR ----------
+$('btnOcr').onclick=()=>$('ocrFile').click();
+$('ocrFile').onchange=async e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  const st=$('ocrStatus'); st.textContent='OCR 엔진 불러오는 중… (처음 한 번은 수십 초 걸릴 수 있어요)';
+  try{
+    if(!window.Tesseract) await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js';s.onload=ok;s.onerror=no;document.head.appendChild(s)});
+    const worker=await Tesseract.createWorker(['kor','eng'],1,{logger:m=>{if(m.status==='recognizing text')st.textContent=`인식 중… ${Math.round(m.progress*100)}%`}});
+    let names=[];
+    for(const f of files){const {data}=await worker.recognize(f);names.push(...extractNames(data.text))}
+    await worker.terminate();
+    const cur=parseNames($('cPlayers').value);
+    const merged=[...new Set([...cur,...names])];
+    $('cPlayers').value=merged.join('\n');
+    st.textContent=`${names.length}명 추출됨. 잘못 인식된 이름은 직접 수정해 주세요.`;
+  }catch(err){console.error(err);st.textContent='이미지 인식 실패: '+err}
+  e.target.value='';
+};
+function extractNames(text){
+  const stop=/(투표|참석|불참|미정|명|마감|복수|익명|선택|항목|결과|오후|오전|카카오|메시지|전체|보기|완료|진행|:|\d{1,2}:\d{2}|%)/;
+  return text.split('\n').flatMap(l=>l.split(/[,·•|]/)).map(l=>l.replace(/[^\p{L}\p{N} ]/gu,'').trim())
+    .filter(l=>l && l.length>=2 && l.length<=10 && !stop.test(l) && !/^\d+$/.test(l))
+    .map(l=>l.replace(/\s+/g,''));
+}
+
+// ---------- draft logic (host authoritative) ----------
+function newState(captains, players, mode, first){
+  const order = first==='shuffle'?shuffle(captains.map((_,i)=>i)):captains.map((_,i)=>i);
+  return {captains, teams:captains.map(()=>[]), pool:players.filter(p=>!captains.includes(p)), mode, order,
+    roundOrders:[], picks:[], online:{}};
+}
+function totalPicks(s){return s.picks.length + s.pool.length}
+function turnCaptain(s){
+  if(!s.pool.length) return -1;
+  const n=s.captains.length, k=s.picks.length, r=Math.floor(k/n), i=k%n;
+  if(s.mode==='snake'){const o=r%2===0?s.order:s.order.slice().reverse();return o[i]}
+  while(s.roundOrders.length<=r) s.roundOrders.push(shuffle(s.captains.map((_,x)=>x)));
+  return s.roundOrders[r][i];
+}
+function applyPick(captain, player){
+  const t=turnCaptain(state);
+  if(t!==captain) return '지금은 '+state.captains[t]+' 차례입니다';
+  const idx=state.pool.indexOf(player); if(idx<0) return '이미 선택된 선수입니다';
+  state.pool.splice(idx,1); state.teams[captain].push(player); state.picks.push({c:captain,p:player});
+  return null;
+}
+function undo(){
+  const last=state.picks.pop(); if(!last) return;
+  state.teams[last.c]=state.teams[last.c].filter(x=>x!==last.p); state.pool.push(last.p);
+  state.pool.sort((a,b)=>a.localeCompare(b,'ko'));
+  broadcast();
+}
+function broadcast(){
+  if(!isHost) return;
+  try{localStorage.setItem(LS,JSON.stringify({code:currentCode,pin:hostPin,state}))}catch(e){}
+  conns.forEach(c=>c.open&&c.send({t:'state',state}));
+  render();
+}
+
+// ---------- networking ----------
+let currentCode='';
+function startHost(code,pin,s){
+  isHost=true; hostPin=pin; state=s; currentCode=code;
+  peer=new Peer(PREFIX+code);
+  peer.on('open',()=>{enterDraft();broadcast();history.replaceState(null,'','#'+code)});
+  peer.on('error',err=>{
+    if(err.type==='unavailable-id'){toast('코드 충돌 — 잠시 후 다시 시도');}
+    else toast('연결 오류: '+err.type);
+  });
+  peer.on('disconnected',()=>setTimeout(()=>!peer.destroyed&&peer.reconnect(),1500));
+  peer.on('connection',c=>{
+    c.on('data',d=>{
+      if(d.t==='join'){
+        if(d.pin!==hostPin){c.send({t:'denied'});setTimeout(()=>c.close(),300);return}
+        c.authed=true; conns.push(c); c.send({t:'state',state});
+      } else if(!c.authed) return;
+      else if(d.t==='claim'){c.me=d.me;updateOnline();}
+      else if(d.t==='pick'){const e=applyPick(d.c,d.p); if(e) c.send({t:'err',m:e}); broadcast();}
+    });
+    c.on('close',()=>{conns=conns.filter(x=>x!==c);updateOnline()});
+  });
+}
+function updateOnline(){
+  const on={}; conns.forEach(c=>{if(c.me!==undefined&&c.me!=='')on[c.me]=1}); if(me!=='')on[me]=1;
+  state.online=on; broadcast();
+}
+function join(code,pin){
+  currentCode=code;
+  peer=new Peer();
+  $('btnJoin').disabled=true; $('btnJoin').textContent='접속 중…';
+  const fail=m=>{toast(m);$('btnJoin').disabled=false;$('btnJoin').textContent='접속'};
+  peer.on('error',err=>fail(err.type==='peer-unavailable'?'세션을 찾을 수 없습니다':'연결 오류: '+err.type));
+  peer.on('open',()=>{
+    hostConn=peer.connect(PREFIX+code,{reliable:true});
+    hostConn.on('open',()=>hostConn.send({t:'join',pin}));
+    hostConn.on('data',d=>{
+      if(d.t==='denied') fail('PIN이 틀렸습니다');
+      else if(d.t==='err') toast(d.m);
+      else if(d.t==='state'){
+        const first=!state; state=d.state;
+        if(first){enterDraft();localStorage.setItem('futsalPin_'+code,pin);history.replaceState(null,'','#'+code);if(me!=='')hostConn.send({t:'claim',me})}
+        render();
+      }
+    });
+    hostConn.on('close',()=>{toast('진행자와 연결이 끊겼습니다. 재접속 중…');setTimeout(()=>location.reload(),2500)});
+  });
+}
+function sendPick(c,p){
+  if(isHost){const e=applyPick(c,p); if(e) toast(e); broadcast();}
+  else hostConn.send({t:'pick',c,p});
+}
+
+// ---------- UI ----------
+$('btnCreate').onclick=()=>{
+  const pin=$('cPin').value.trim(), caps=parseNames($('cCaptains').value), players=parseNames($('cPlayers').value);
+  if(pin.length<4) return toast('PIN은 4자리 이상');
+  if(caps.length<2) return toast('팀장은 2명 이상');
+  if(players.filter(p=>!caps.includes(p)).length<1) return toast('참가 명단을 입력하세요');
+  const code=String(Math.floor(100000+Math.random()*900000));
+  startHost(code,pin,newState(caps,players,$('cMode').value,$('cFirst').value));
+};
+$('btnJoin').onclick=()=>{
+  const code=$('jCode').value.trim(), pin=$('jPin').value.trim();
+  if(!/^\d{6}$/.test(code)) return toast('세션 코드 6자리');
+  join(code,pin);
+};
+
+function enterDraft(){
+  $('dCode').textContent=currentCode;
+  if(isHost){$('hostInfo').classList.remove('hidden');$('dPin').textContent=hostPin;$('hostCtl').classList.remove('hidden');$('resHostCtl').classList.remove('hidden')}
+  const sel=$('meSel'); sel.innerHTML='<option value="">관전자</option>'+state.captains.map((c,i)=>`<option value="${i}">팀장: ${esc(c)}</option>`).join('');
+  if(me!==''&&+me<state.captains.length) sel.value=me; else me='';
+  if(isHost&&me==='') { sel.options[0].textContent='진행자 (모든 팀 대리 선택 가능)'; }
+  sel.onchange=()=>{me=sel.value;localStorage.setItem('futsalMe',me);if(hostConn)hostConn.send({t:'claim',me});if(isHost)updateOnline();render()};
+  $('modeInfo').textContent=state.mode==='snake'
+    ?'스네이크: '+state.order.map(i=>state.captains[i]).join(' → ')+' → 역순'
+    :'매 라운드마다 순서를 랜덤으로 정합니다';
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function canPickFor(c){return isHost&&me===''? true : me!==''&&+me===c}
+function render(){
+  if(!state) return;
+  const t=turnCaptain(state);
+  if(t<0){show('result');renderResult();return}
+  show('draft');
+  const st=$('status'); const mine=canPickFor(t)&&me!=='';
+  st.className='status'+(mine?' my':'');
+  const n=state.captains.length;
+  st.textContent=(mine?'🟢 내 차례! ':'')+`${Math.floor(state.picks.length/n)+1}라운드 · ${state.captains[t]} 팀장 선택 중`;
+  $('teams').innerHTML=state.captains.map((c,i)=>`<div class="team ${i===t?'turn':''}" data-team="${i}">
+    <h3><span>${esc(c)} <span class="on">${state.online&&state.online[i]?'●':''}</span></span>${i===t?'<span class="badge">차례</span>':''}</h3>
+    <div class="muted">${state.teams[i].length+1}명</div>
+    <div class="chip" style="background:#78350f">👑 ${esc(c)}</div>
+    ${state.teams[i].map(p=>`<div class="chip">${esc(p)}</div>`).join('')}</div>`).join('');
+  $('leftCnt').textContent=`(${state.pool.length}명)`;
+  $('pool').innerHTML=state.pool.map(p=>`<span class="chip pchip" data-p="${esc(p)}">${esc(p)}</span>`).join('');
+  document.querySelectorAll('.pchip').forEach(el=>bindDrag(el));
+  document.querySelectorAll('.team').forEach(el=>el.onclick=()=>{if(selected){tryDrop(+el.dataset.team,selected);selected=null}});
+}
+
+// pointer-based drag (works on mouse + touch)
+let selected=null;
+function tryDrop(team,p){
+  const t=turnCaptain(state);
+  if(team!==t) return toast('지금은 '+state.captains[t]+' 차례입니다');
+  if(!canPickFor(t)) return toast(state.captains[t]+' 팀장만 선택할 수 있어요');
+  sendPick(t,p);
+}
+function bindDrag(el){
+  el.onpointerdown=e=>{
+    e.preventDefault();
+    const p=el.dataset.p, sx=e.clientX, sy=e.clientY; let ghost=null, over=null;
+    const move=ev=>{
+      if(!ghost&&Math.hypot(ev.clientX-sx,ev.clientY-sy)>6){ghost=el.cloneNode(true);ghost.classList.add('ghost');document.body.appendChild(ghost)}
+      if(!ghost) return;
+      ghost.style.left=ev.clientX+'px';ghost.style.top=ev.clientY+'px';
+      const tgt=document.elementFromPoint(ev.clientX,ev.clientY)?.closest('.team');
+      if(over&&over!==tgt) over.classList.remove('over');
+      over=tgt; if(over) over.classList.add('over');
+    };
+    const up=ev=>{
+      window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',up);window.removeEventListener('pointercancel',up);
+      if(ghost){ghost.remove(); if(over){over.classList.remove('over');tryDrop(+over.dataset.team,p)}}
+      else{ // tap: select
+        document.querySelectorAll('.pchip').forEach(x=>x.classList.remove('mine'));
+        if(selected===p) selected=null; else {selected=p;el.classList.add('mine');toast(p+' 선택됨 → 팀 칸을 탭하세요')}
+      }
+    };
+    window.addEventListener('pointermove',move);window.addEventListener('pointerup',up);window.addEventListener('pointercancel',up);
+  };
+}
+
+// ---------- result ----------
+const COLORS=['#ef4444','#3b82f6','#22c55e','#f59e0b','#a855f7','#ec4899','#14b8a6','#f97316'];
+function dateStr(){const d=new Date();return `${d.getFullYear()}.${d.getMonth()+1}.${d.getDate()}`}
+function resultText(){
+  return `⚽ 풋살 팀 구성 (${dateStr()})\n\n`+state.captains.map((c,i)=>`[${c} 팀] ${state.teams[i].length+1}명\n👑 ${c}\n`+state.teams[i].map((p,j)=>`${j+1}. ${p}`).join('\n')).join('\n\n');
+}
+function renderResult(){
+  $('resultText').value=resultText();
+  const cv=$('resultCanvas'), n=state.captains.length, cols=Math.min(n,4), rows=Math.ceil(n/cols);
+  const maxLen=Math.max(...state.teams.map(t=>t.length))+1;
+  const colW=260, lineH=40, headH=70, boxH=headH+maxLen*lineH+20, W=cols*colW+(cols+1)*20, H=110+rows*(boxH+20);
+  const s=2; cv.width=W*s; cv.height=H*s; cv.style.width=Math.min(W,cv.parentElement.clientWidth)+'px';
+  const g=cv.getContext('2d'); g.scale(s,s);
+  const F='"Apple SD Gothic Neo","Malgun Gothic",sans-serif';
+  g.fillStyle='#0f172a';g.fillRect(0,0,W,H);
+  g.fillStyle='#fff';g.font=`800 30px ${F}`;g.textAlign='center';g.fillText('⚽ 오늘의 풋살 팀',W/2,50);
+  g.fillStyle='#94a3b8';g.font=`16px ${F}`;g.fillText(dateStr(),W/2,80);
+  state.captains.forEach((c,i)=>{
+    const x=20+(i%cols)*(colW+20), y=100+Math.floor(i/cols)*(boxH+20), col=COLORS[i%COLORS.length];
+    g.fillStyle='#1e293b';rr(g,x,y,colW,boxH,14);g.fill();
+    g.fillStyle=col;rr(g,x,y,colW,headH-10,14);g.fill();g.fillRect(x,y+30,colW,headH-40);
+    g.fillStyle='#fff';g.font=`800 22px ${F}`;g.textAlign='left';g.fillText(c+' 팀',x+16,y+38);
+    g.font=`14px ${F}`;g.textAlign='right';g.fillText((state.teams[i].length+1)+'명',x+colW-16,y+38);
+    g.textAlign='left';g.font=`600 19px ${F}`;
+    [('👑 '+c),...state.teams[i].map((p,j)=>(j+1)+'. '+p)].forEach((line,j)=>{g.fillStyle=j?'#e2e8f0':'#fbbf24';g.fillText(line,x+18,y+headH+24+j*lineH)});
+  });
+}
+function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
+function download(name,url){const a=document.createElement('a');a.href=url;a.download=name;a.click()}
+$('btnPng').onclick=()=>download(`futsal-${dateStr()}.png`,$('resultCanvas').toDataURL('image/png'));
+$('btnCopy').onclick=()=>{navigator.clipboard.writeText(resultText()).then(()=>toast('복사됨'),()=>{$('resultText').select();document.execCommand('copy');toast('복사됨')})};
+$('btnHtml').onclick=()=>{
+  const body=state.captains.map((c,i)=>`<div class="t" style="border-top:8px solid ${COLORS[i%COLORS.length]}"><h2>${esc(c)} 팀 <small>${state.teams[i].length+1}명</small></h2><ol><li class="cap">👑 ${esc(c)}</li>${state.teams[i].map(p=>`<li>${esc(p)}</li>`).join('')}</ol></div>`).join('');
+  const html=`<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>풋살 팀 ${dateStr()}</title><style>body{font-family:sans-serif;background:#0f172a;color:#e2e8f0;margin:0;padding:16px}h1{text-align:center}.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:1000px;margin:auto}.t{background:#1e293b;border-radius:12px;padding:12px}small{color:#94a3b8;font-size:13px}ol{padding-left:20px;line-height:1.9}.cap{list-style:none;margin-left:-20px;color:#fbbf24}</style></head><body><h1>⚽ 풋살 팀 (${dateStr()})</h1><div class="g">${body}</div></body></html>`;
+  download(`futsal-${dateStr()}.html`,URL.createObjectURL(new Blob([html],{type:'text/html'})));
+};
+
+// ---------- host controls ----------
+[$('btnUndo'),$('btnUndo2')].forEach(b=>b.onclick=()=>undo());
+[$('btnReset'),$('btnReset2')].forEach(b=>b.onclick=()=>{if(confirm('세션을 종료하고 처음으로 돌아갈까요?')){localStorage.removeItem(LS);location.href=location.pathname}});
+$('btnShare').onclick=()=>{navigator.clipboard.writeText(location.origin+location.pathname+'#'+currentCode).then(()=>toast('링크 복사됨 (PIN은 따로 알려주세요)'))};
+
+// ---------- boot ----------
+(function boot(){
+  const code=location.hash.slice(1);
+  let saved=null; try{saved=JSON.parse(localStorage.getItem(LS))}catch(e){}
+  if(saved&&saved.code&&(code===saved.code||!code)){ startHost(saved.code,saved.pin,saved.state); return; }
+  if(/^\d{6}$/.test(code)){
+    $('jCode').value=code;
+    const pin=localStorage.getItem('futsalPin_'+code);
+    if(pin){$('jPin').value=pin;join(code,pin)}
+  }
+})();
+</script>
 </body>
 </html>
