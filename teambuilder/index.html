@@ -82,15 +82,16 @@ button:disabled{opacity:.4;cursor:not-allowed}
         <option value="snake">스네이크 (1,2,3,3,2,1 …)</option>
         <option value="random">매 라운드 순서 랜덤</option>
       </select>
-      <label>스네이크 1라운드 순서</label>
+      <label id="cFirstLbl">스네이크 1라운드 순서</label>
       <select id="cFirst"><option value="input">입력한 순서대로</option><option value="shuffle">랜덤으로 정하기</option></select>
-      <label>참가 명단 (한 줄 또는 쉼표로 구분 — 팀장은 자동 제외)</label>
-      <textarea id="cPlayers" placeholder="홍길동&#10;김철수, 이영희"></textarea>
+      <label>참가 명단 (이름/출생년도/사는동 형식 가능 — 이름만 사용, 팀장은 자동 제외)</label>
+      <textarea id="cPlayers" placeholder="홍길동/95/영통동&#10;김철수/92/매탄동"></textarea>
       <div class="row" style="margin-top:8px">
-        <button class="sec" id="btnOcr">📷 카톡 투표 캡처에서 추출</button>
+        <button class="sec" id="btnOcr">📷 캡처 파일 업로드</button>
+        <button class="sec" id="btnPasteImg">📋 클립보드 붙여넣기</button>
       </div>
       <input id="ocrFile" type="file" accept="image/*" multiple class="hidden">
-      <div id="ocrStatus" class="muted" style="margin-top:6px"></div>
+      <div id="ocrStatus" class="muted" style="margin-top:6px">이 화면에서 Ctrl+V로 캡처 이미지를 바로 붙여넣어도 됩니다.</div>
       <div style="margin-top:14px"><button id="btnCreate" style="width:100%">세션 시작</button></div>
       <p class="muted">진행자 기기가 세션 서버 역할을 합니다. 드래프트가 끝날 때까지 이 화면을 닫지 마세요. (새로고침 시 같은 코드로 자동 복구)</p>
     </div>
@@ -150,17 +151,30 @@ let me = localStorage.getItem('futsalMe') || '';
 
 function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2200)}
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function parseNames(s){return [...new Set(s.split(/[\n,]+/).map(x=>x.trim()).filter(Boolean))]}
+function parseNames(s){return [...new Set(s.split(/[\n,]+/).map(x=>x.split(/[\/／]/)[0].trim()).filter(Boolean))]}
 function show(id){['home','draft','result'].forEach(s=>$(s).classList.toggle('hidden',s!==id))}
 
 // ---------- tabs ----------
+const syncFirst=()=>{const off=$('cMode').value!=='snake';$('cFirst').disabled=off;$('cFirstLbl').style.opacity=off?.4:1};$('cMode').onchange=syncFirst;syncFirst();
 $('tabJoin').onclick=()=>{$('joinBox').classList.remove('hidden');$('createBox').classList.add('hidden');$('tabJoin').className='';$('tabCreate').className='sec'};
 $('tabCreate').onclick=()=>{$('createBox').classList.remove('hidden');$('joinBox').classList.add('hidden');$('tabCreate').className='';$('tabJoin').className='sec'};
 
 // ---------- OCR ----------
 $('btnOcr').onclick=()=>$('ocrFile').click();
-$('ocrFile').onchange=async e=>{
-  const files=[...e.target.files]; if(!files.length) return;
+$('ocrFile').onchange=async e=>{await runOcr([...e.target.files]);e.target.value=''};
+$('btnPasteImg').onclick=async()=>{
+  try{const items=await navigator.clipboard.read();const files=[];
+    for(const it of items){const t=it.types.find(x=>x.startsWith('image/'));if(t)files.push(await it.getType(t))}
+    if(files.length) runOcr(files); else{const txt=await navigator.clipboard.readText();if(txt){$('cPlayers').value=[...new Set([...parseNames($('cPlayers').value),...parseNames(txt)])].join('\n');toast('텍스트 명단을 붙여넣었습니다')}else toast('클립보드가 비어 있습니다')}
+  }catch(err){toast('클립보드 접근 불가 — Ctrl+V로 붙여넣어 주세요')}
+};
+document.addEventListener('paste',e=>{
+  if($('createBox').classList.contains('hidden')||$('home').classList.contains('hidden'))return;
+  const files=[...(e.clipboardData?.items||[])].filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile());
+  if(files.length){e.preventDefault();runOcr(files)}
+});
+async function runOcr(files){
+  if(!files.length) return;
   const st=$('ocrStatus'); st.textContent='OCR 엔진 불러오는 중… (처음 한 번은 수십 초 걸릴 수 있어요)';
   try{
     if(!window.Tesseract) await new Promise((ok,no)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js';s.onload=ok;s.onerror=no;document.head.appendChild(s)});
@@ -173,11 +187,10 @@ $('ocrFile').onchange=async e=>{
     $('cPlayers').value=merged.join('\n');
     st.textContent=`${names.length}명 추출됨. 잘못 인식된 이름은 직접 수정해 주세요.`;
   }catch(err){console.error(err);st.textContent='이미지 인식 실패: '+err}
-  e.target.value='';
-};
+}
 function extractNames(text){
   const stop=/(투표|참석|불참|미정|명|마감|복수|익명|선택|항목|결과|오후|오전|카카오|메시지|전체|보기|완료|진행|:|\d{1,2}:\d{2}|%)/;
-  return text.split('\n').flatMap(l=>l.split(/[,·•|]/)).map(l=>l.replace(/[^\p{L}\p{N} ]/gu,'').trim())
+  return text.split('\n').flatMap(l=>l.split(/[,·•|]/)).map(l=>l.split(/[\/／]/)[0]).map(l=>l.replace(/[^\p{L}\p{N} ]/gu,'').trim())
     .filter(l=>l && l.length>=2 && l.length<=10 && !stop.test(l) && !/^\d+$/.test(l))
     .map(l=>l.replace(/\s+/g,''));
 }
