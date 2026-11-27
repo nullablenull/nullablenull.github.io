@@ -347,7 +347,7 @@ function extractPlain(text){
 function newState(captains, players, mode, first){
   const order = first==='shuffle'?shuffle(captains.map((_,i)=>i)):captains.map((_,i)=>i);
   return {captains, teams:captains.map(()=>[]), pool:players.filter(p=>!captains.includes(p)), mode, order,
-    roundOrders:[], picks:[], online:{}, motto:Math.floor(Math.random()*MOTTOS.length)};
+    roundOrders:[], picks:[], online:{}};
 }
 function totalPicks(s){return s.picks.length + s.pool.length}
 function newRoundOrder(s,r){
@@ -669,8 +669,9 @@ const sorted=i=>state.teams[i].slice().sort((a,b)=>a.localeCompare(b,'ko'));
 function resultText(){
   return `⚽ 풋살 팀 구성 (${dateStr()})\n\n`+state.captains.map((c,i)=>`[${c} 팀]\n👑 ${c}\n`+sorted(i).join('\n')).join('\n\n');
 }
-// 결과 이미지 하단 이스터 에그 문구 (세션마다 하나를 무작위로 고정)
-const MOTTOS=['BLUEWINGS  ·  OUR PRIDE','우리가 가면 길이 된다','KEEP THE FAITH','STAND UP AND FIGHT','WE SHALL NEVER SURRENDER','COURAGE 100% COURAGE','청백적의 이름으로  ·  SINCE 1995'];
+// 결과 이미지 하단 이스터 에그 문구 (이미지가 새로 만들어질 때마다 무작위)
+const MOTTOS=['BLUEWINGS  ·  OUR PRIDE','FRENTE TRICOLOR','축구수도','우리가 가면 길이 된다','KEEP THE FAITH','STAND UP AND FIGHT','WE SHALL NEVER SURRENDER','COURAGE 100% COURAGE'];
+let mottoPick=null;
 function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&document.fonts.ready.then(()=>renderResult());}
   $('resultText').value=resultText();
   // 매치데이 포스터 스타일 (1080px 폭, 인스타 비율에 가깝게)
@@ -734,7 +735,8 @@ function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&doc
   });
   // footer
   g.fillStyle=RED; g.fillRect(0,H-12,W,12); g.fillStyle='#fff'; g.fillRect(0,H-18,W,4);
-  g.textAlign='center'; g.fillStyle='#9fb6ef'; g.font=`700 22px ${F}`; g.fillText(MOTTOS[(state.motto||0)%MOTTOS.length],W/2,H-58,W-pad*2);
+  g.textAlign='center'; g.fillStyle='#9fb6ef'; g.font=`700 22px ${F}`; const mk=JSON.stringify(state.teams); if(!mottoPick||mottoPick.k!==mk) mottoPick={k:mk,t:MOTTOS[Math.floor(Math.random()*MOTTOS.length)]};
+  g.fillText(mottoPick.t,W/2,H-58,W-pad*2);
 }
 function fit(g,t,max,size,F){while(size>18){g.font=`900 ${size}px ${F}`;if(g.measureText(t).width<=max)break;size-=2}return size}
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
