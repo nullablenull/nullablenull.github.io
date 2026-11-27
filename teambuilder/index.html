@@ -92,8 +92,15 @@ body>.wrap{padding-bottom:84px}
 .crow .nm{flex:0 0 96px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crow .sw{flex:0 0 28px;height:28px;border-radius:8px;border:1px solid var(--line)}
 .crow select{flex:1;min-width:0}
+.tgl{position:relative;flex:0 0 46px;height:26px;margin:0;cursor:pointer}
+.tgl input{opacity:0;width:0;height:0;position:absolute}
+.tgl span{position:absolute;inset:0;background:#cfd6e4;border-radius:999px;transition:.2s}
+.tgl span:before{content:'';position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px #0003}
+.tgl input:checked+span{background:var(--blue)}
+.tgl input:checked+span:before{transform:translateX(20px)}
+.tgl.dis{opacity:.45;cursor:not-allowed}
 .crow select.lg{flex:0 0 150px}
-@media (max-width:600px){.crow{flex-wrap:wrap}.crow select.lg{flex:1 1 40%}.crow select.cl{flex:1 1 100%}}
+@media (max-width:600px){.crow{flex-wrap:wrap}.crow select.lg{flex:1 1 40%}.crow select.cl{flex:1 1 100%}.crow select{order:1}.crow .nm{flex:1 1 auto}}
 #resultCanvas{max-width:100%;border-radius:12px;display:block;margin:10px auto}
 </style>
 </head>
@@ -172,7 +179,7 @@ body>.wrap{padding-bottom:84px}
       </div>
     </div>
     <div id="status" class="status"></div>
-    <div class="card" id="conceptBox"><h2>팀 컨셉</h2><div class="muted" style="margin-bottom:6px">팀장이 리그와 구단을 골라 자기 팀 컨셉을 정하세요. 결과 이미지에 반영됩니다.</div><div id="conceptRows"></div></div>
+    <div class="card" id="conceptBox"><h2>팀 컨셉</h2><div class="muted" style="margin-bottom:6px">기본은 블루·레드 컨셉이에요. 바꾸고 싶은 팀장만 토글을 켜고 리그와 구단을 고르세요. 결과 이미지에 반영됩니다.</div><div id="conceptRows"></div></div>
     <div id="teams" class="teams"></div>
     <div class="card"><h2>남은 선수 <span id="leftCnt" class="muted"></span></h2>
       <div class="muted" style="margin-bottom:6px">선수를 끌어서 내 팀 칸에 놓거나, 선수를 탭해서 고른 뒤 아래 <b>선택</b> 버튼을 누르세요</div>
@@ -633,16 +640,25 @@ function sendConcept(c,v){
   if(isHost){const e=setConcept(c,v);if(e)toast(e);broadcast()} else hostConn.send({t:'concept',c,v});
 }
 let conceptSig='';
+const conceptOpen={}; // 토글을 켠 팀 (로컬 UI 상태)
 function renderConcepts(){
-  const sig=JSON.stringify([state.concepts||{},me,isHost,leagueUI,state.captains]); if(sig===conceptSig) return; conceptSig=sig;
+  const sig=JSON.stringify([state.concepts||{},me,isHost,leagueUI,conceptOpen,state.captains]); if(sig===conceptSig) return; conceptSig=sig;
   const used=state.concepts||{};
   $('conceptRows').innerHTML=state.captains.map((c,i)=>{
-    const cl=clubOf(i), can=canPickFor(i), lg=leagueUI[i]||(cl&&cl.league)||'K League', clubs=(LEAGUES.find(x=>x[0]===lg)||LEAGUES[0])[1];
-    return `<div class="crow"><span class="nm">${esc(c)}</span><span class="sw" style="background:${cl?`linear-gradient(135deg,${cl[1]} 55%,${cl[2]} 55% ${cl[3]?'75%,'+cl[3]+' 75%':''})`:'#f3f5fa'}"></span>
+    const cl=clubOf(i), can=canPickFor(i), on=!!cl||!!conceptOpen[i], lg=leagueUI[i]||(cl&&cl.league)||'K League', clubs=(LEAGUES.find(x=>x[0]===lg)||LEAGUES[0])[1];
+    const sw=`<span class="sw" style="background:${cl?`linear-gradient(135deg,${cl[1]} 55%,${cl[2]} 55% ${cl[3]?'75%,'+cl[3]+' 75%':''})`:'linear-gradient(135deg,#0a3ca0 55%,#d71920 55%)'}"></span>`;
+    const tg=`<label class="tgl ${can?'':'dis'}"><input type="checkbox" data-c="${i}" ${on?'checked':''} ${can?'':'disabled'}><span></span></label>`;
+    if(!on) return `<div class="crow"><span class="nm">${esc(c)}</span>${sw}<span class="muted" style="flex:1">기본 컨셉</span>${tg}</div>`;
+    return `<div class="crow"><span class="nm">${esc(c)}</span>${sw}
       <select class="lg" data-c="${i}" ${can?'':'disabled'}>${LEAGUES.map(([l])=>`<option ${l===lg?'selected':''}>${esc(l)}</option>`).join('')}</select>
-      <select class="cl" data-c="${i}" ${can?'':'disabled'}><option value="">${cl&&cl.league!==lg?esc(cl[0])+' (선택됨)':'기본 (블루·레드)'}</option>${clubs.map(k=>{const t=Object.entries(used).some(([x,v])=>v===k[0]&&+x!==i);return `<option value="${esc(k[0])}" ${used[i]===k[0]?'selected':''} ${t?'disabled':''}>${esc(k[0])}${t?' (선택됨)':''}</option>`}).join('')}</select></div>`}).join('');
+      <select class="cl" data-c="${i}" ${can?'':'disabled'}><option value="">${cl&&cl.league!==lg?esc(cl[0])+' (선택됨)':'구단 선택'}</option>${clubs.map(k=>{const t=Object.entries(used).some(([x,v])=>v===k[0]&&+x!==i);return `<option value="${esc(k[0])}" ${used[i]===k[0]?'selected':''} ${t?'disabled':''}>${esc(k[0])}${t?' (선택됨)':''}</option>`}).join('')}</select>${tg}</div>`}).join('');
+  $('conceptRows').querySelectorAll('.tgl input').forEach(cb=>cb.onchange=()=>{
+    const i=+cb.dataset.c; conceptOpen[i]=cb.checked;
+    if(!cb.checked&&clubOf(i)) sendConcept(i,''); // 끄면 기본 컨셉으로 되돌림
+    renderConcepts();
+  });
   $('conceptRows').querySelectorAll('select.lg').forEach(sel=>sel.onchange=()=>{leagueUI[+sel.dataset.c]=sel.value;renderConcepts()});
-  $('conceptRows').querySelectorAll('select.cl').forEach(sel=>sel.onchange=()=>{if(sel.value||!clubOf(+sel.dataset.c)||clubOf(+sel.dataset.c).league===(leagueUI[+sel.dataset.c]||clubOf(+sel.dataset.c).league))sendConcept(+sel.dataset.c,sel.value)});
+  $('conceptRows').querySelectorAll('select.cl').forEach(sel=>sel.onchange=()=>{if(sel.value)sendConcept(+sel.dataset.c,sel.value)});
 }
 
 // ---------- result ----------
