@@ -131,9 +131,10 @@ body>.wrap{padding-bottom:84px}
       <label>뽑는 순서</label>
       <select id="cMode">
         <option value="snake">스네이크 (1,2,3,3,2,1 …)</option>
+        <option value="fixed">고정 순서 (1,2,3,1,2,3 …)</option>
         <option value="random">매 라운드 순서 랜덤</option>
       </select>
-      <label id="cFirstLbl">스네이크 1라운드 순서</label>
+      <label id="cFirstLbl">1라운드 순서 (스네이크·고정)</label>
       <select id="cFirst"><option value="input">입력한 순서대로</option><option value="shuffle">랜덤으로 정하기</option></select>
       <label>참가 명단 (한 줄에 한 명 또는 쉼표로 구분 — 팀장은 자동 제외)</label>
       <div id="cCount" class="muted" style="margin:-2px 0 6px;font-weight:700;color:var(--blue)"></div>
@@ -233,7 +234,7 @@ function parseNames(s){return [...new Set(s.split(/[\n,]+/).map(x=>x.split(/[\/�
 function show(id){['home','draft','result'].forEach(s=>$(s).classList.toggle('hidden',s!==id))}
 
 // ---------- tabs ----------
-const syncFirst=()=>{const off=$('cMode').value!=='snake';$('cFirst').disabled=off;$('cFirstLbl').style.opacity=off?.4:1};$('cMode').onchange=syncFirst;syncFirst();
+const syncFirst=()=>{const off=$('cMode').value==='random';$('cFirst').disabled=off;$('cFirstLbl').style.opacity=off?.4:1};$('cMode').onchange=syncFirst;syncFirst();
 function updateCount(){
   const caps=parseNames($('cCaptains').value), all=parseNames($('cPlayers').value), pl=all.filter(p=>!caps.includes(p));
   const dup=all.length-pl.length, total=pl.length+caps.length;
@@ -360,6 +361,7 @@ function turnCaptain(s){
   if(!s.pool.length) return -1;
   const n=s.captains.length, k=s.picks.length, r=Math.floor(k/n), i=k%n;
   if(s.mode==='snake'){const o=r%2===0?s.order:s.order.slice().reverse();return o[i]}
+  if(s.mode==='fixed') return s.order[i];
   if(isHost) while(s.roundOrders.length<=r) s.roundOrders.push(newRoundOrder(s,r));
   return s.roundOrders[r]?s.roundOrders[r][i]:-2;
 }
@@ -490,6 +492,7 @@ function enterDraft(){
   $('btnRole').onclick=openRole;
   $('modeInfo').textContent=state.mode==='snake'
     ?'스네이크: '+state.order.map(i=>state.captains[i]).join(' → ')+' → 역순'
+    :state.mode==='fixed'?'고정 순서: '+state.order.map(i=>state.captains[i]).join(' → ')+' → 반복'
     :'매 라운드마다 순서를 랜덤으로 정합니다';
 }
 function setMe(v){
@@ -512,7 +515,7 @@ function render(){
   renderChat();
   const t=turnCaptain(state);
   if(t===-2) return;
-  if(state.mode!=='snake'){const r=Math.floor(state.picks.length/state.captains.length),o=state.roundOrders[r];if(o)$('modeInfo').textContent=`매 라운드 랜덤 · ${r+1}라운드 순서: `+o.map(i=>state.captains[i]).join(' → ')}
+  if(state.mode==='random'){const r=Math.floor(state.picks.length/state.captains.length),o=state.roundOrders[r];if(o)$('modeInfo').textContent=`매 라운드 랜덤 · ${r+1}라운드 순서: `+o.map(i=>state.captains[i]).join(' → ')}
   if(t<0){show('result');renderResult();return}
   show('draft');
   renderConcepts();
