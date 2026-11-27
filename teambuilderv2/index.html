@@ -564,12 +564,12 @@ function bindDrag(el){
 }
 
 // ---------- team concepts (K리그1·2 구단, 구분 없이 가나다순) ----------
-// [이름, 메인 컬러, 서브 컬러] — 구단 상징색을 참고한 근사값
+// [이름, 메인 컬러, 서브 컬러, (셋째 컬러)] — 셋째 컬러가 있으면 3색(예: 수원 삼성 청·백·적) — 구단 상징색을 참고한 근사값
 const CLUBS=[
  ['강원FC','#f37321','#0d2b5c'],['경남FC','#e30613','#003b7a'],['광주FC','#ffd200','#c8102e'],['김천 상무','#d6001c','#0d2b6b'],
  ['김포FC','#0072bc','#c9a227'],['김해FC 2008','#0f5a32','#ffd200'],['대구FC','#4fa3db','#0d2b5c'],['대전 하나시티즌','#009490','#8b1d3a'],
  ['부산 아이파크','#c8102e','#1d1d1b'],['부천FC1995','#c8102e','#111111'],['서울 이랜드','#002b5c','#c9a227'],['성남FC','#1a1a1a','#8a8a8a'],
- ['수원 삼성 블루윙즈','#0a3ca0','#d71920'],['수원FC','#c8102e','#0a2e6e'],['안산 그리너스','#00843d','#c4d600'],['FC안양','#5b2d8e','#1f1f1f'],
+ ['수원 삼성 블루윙즈','#0a3ca0','#ffffff','#d71920'],['수원FC','#c8102e','#0a2e6e'],['안산 그리너스','#00843d','#c4d600'],['FC안양','#5b2d8e','#1f1f1f'],
  ['용인FC','#0a4ea2','#e30613'],['울산 HD','#1d3e8f','#f5c400'],['인천 유나이티드','#0a4ea2','#111111'],['전남 드래곤즈','#f5c400','#111111'],
  ['전북 현대 모터스','#00704a','#c9a227'],['제주SK','#f47b20','#c8102e'],['천안시티FC','#1fa3dc','#0d2b5c'],['충남아산FC','#00529b','#ffd200'],
  ['충북청주FC','#0a3f7d','#ffd200'],['파주 프런티어','#0a6cbd','#111111'],['포항 스틸러스','#c8102e','#111111'],['FC서울','#b3001b','#111111'],
@@ -589,7 +589,7 @@ function renderConcepts(){
   const used=state.concepts||{};
   $('conceptRows').innerHTML=state.captains.map((c,i)=>{
     const cl=clubOf(i), can=canPickFor(i);
-    return `<div class="crow"><span class="nm">${esc(c)}</span><span class="sw" style="background:${cl?`linear-gradient(135deg,${cl[1]} 60%,${cl[2]} 60%)`:'#f3f5fa'}"></span>
+    return `<div class="crow"><span class="nm">${esc(c)}</span><span class="sw" style="background:${cl?`linear-gradient(135deg,${cl[1]} 55%,${cl[2]} 55% ${cl[3]?'75%,'+cl[3]+' 75%':''})`:'#f3f5fa'}"></span>
       <select data-c="${i}" ${can?'':'disabled'}><option value="">기본 (블루·레드)</option>${CLUBS.map(k=>{const t=Object.entries(used).some(([x,v])=>v===k[0]&&+x!==i);return `<option value="${esc(k[0])}" ${used[i]===k[0]?'selected':''} ${t?'disabled':''}>${esc(k[0])}${t?' (선택됨)':''}</option>`}).join('')}</select></div>`}).join('');
   $('conceptRows').querySelectorAll('select').forEach(sel=>sel.onchange=()=>sendConcept(+sel.dataset.c,sel.value));
 }
@@ -638,17 +638,17 @@ function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&doc
   // team cards
   const TC=[BLUE,RED,'#ffffff','#1f7ae0','#9b1117','#0e7490','#b45309','#334155'];
   state.captains.forEach((c,i)=>{
-    const x=pad+(i%cols)*(colW+gap), y=top+Math.floor(i/cols)*(cardH+gap), cl=clubOf(i), col=cl?cl[1]:TC[i%TC.length], light=!cl&&col==='#ffffff', sub=cl?cl[2]:RED, dark=cl&&isLight(col);
+    const x=pad+(i%cols)*(colW+gap), y=top+Math.floor(i/cols)*(cardH+gap), cl=clubOf(i), col=cl?cl[1]:TC[i%TC.length], light=!cl&&col==='#ffffff', sub=cl?cl[2]:RED, third=cl&&cl[3], dark=cl&&isLight(col);
     g.fillStyle='#00000040'; rr(g,x+6,y+8,colW,cardH,18); g.fill();
     g.fillStyle='#ffffff'; rr(g,x,y,colW,cardH,18); g.fill();
     // card head
     g.save(); rr(g,x,y,colW,cardH,18); g.clip();
     g.fillStyle=light?NAVY:col; g.fillRect(x,y,colW,cardHead);
-    g.fillStyle=light?RED:sub; g.fillRect(x,y+cardHead-6,colW,6);
-    if(cl){g.save();g.translate(x+colW-36,y);g.transform(1,0,-.45,1,0,0);g.globalAlpha=.9;g.fillStyle=sub;g.fillRect(0,0,22,cardHead-6);g.fillRect(34,0,8,cardHead-6);g.restore();g.globalAlpha=1}
+    g.fillStyle=light?RED:(third||sub); g.fillRect(x,y+cardHead-6,colW,6);
+    if(cl){g.save();g.translate(x+colW-36,y);g.transform(1,0,-.45,1,0,0);g.globalAlpha=.9;if(third){g.translate(-14,0);g.fillStyle=sub;g.fillRect(0,0,14,cardHead-6);g.fillStyle=third;g.fillRect(20,0,14,cardHead-6);g.fillStyle=sub;g.fillRect(40,0,6,cardHead-6)}else{g.fillStyle=sub;g.fillRect(0,0,22,cardHead-6);g.fillRect(34,0,8,cardHead-6)}g.restore();g.globalAlpha=1}
     g.globalAlpha=.18; g.fillStyle=dark?'#000':'#fff'; g.font=`italic 900 120px ${F}`; g.textAlign='right'; g.fillText(String(i+1).padStart(2,'0'),x+colW-10,y+cardHead-8); g.globalAlpha=1;
     g.restore();
-    g.textAlign='left'; g.fillStyle=dark?'#000000aa':'#ffffffcc'; g.font=`800 18px ${F}`; g.fillText('TEAM '+String.fromCharCode(65+i)+(cl?'  ·  '+cl[0]:''),x+24,y+42);
+    g.textAlign='left'; g.fillStyle=dark?'#000000aa':'#ffffffcc'; g.font=`800 18px ${F}`; g.fillText('TEAM '+String.fromCharCode(65+i)+(cl?'  ·  '+cl[0]:''),x+24,y+42,colW-130);
     g.fillStyle=dark?'#111':'#fff'; g.font=`900 ${fit(g,c+' 팀',colW-48,38,F)}px ${F}`; g.fillText(c+' 팀',x+24,y+90);
     // players
     let yy=y+cardHead+lineH*.78;
