@@ -172,6 +172,7 @@ body>.wrap{padding-bottom:84px}
       </div>
     </div>
     <div id="status" class="status"></div>
+    <div class="card" id="conceptBox"><h2>팀 컨셉</h2><div class="muted" style="margin-bottom:6px">팀장이 리그와 구단을 골라 자기 팀 컨셉을 정하세요. 결과 이미지에 반영됩니다.</div><div id="conceptRows"></div></div>
     <div id="teams" class="teams"></div>
     <div class="card"><h2>남은 선수 <span id="leftCnt" class="muted"></span></h2>
       <div class="muted" style="margin-bottom:6px">선수를 끌어서 내 팀 칸에 놓거나, 선수를 탭해서 고른 뒤 아래 <b>선택</b> 버튼을 누르세요</div>
@@ -196,7 +197,6 @@ body>.wrap{padding-bottom:84px}
   <section id="result" class="hidden">
     <div class="card">
       <h2>🎉 팀 구성 완료</h2>
-      <div id="conceptBox"><label style="margin-top:0">팀 컨셉 — 팀장이 리그와 구단을 골라 자기 팀 컨셉을 정하세요</label><div id="conceptRows"></div></div>
       <canvas id="resultCanvas"></canvas>
       <div class="row" style="margin-top:10px">
         <button id="btnPng">🖼 이미지 저장</button>
@@ -507,11 +507,12 @@ function render(){
   if(state.mode!=='snake'){const r=Math.floor(state.picks.length/state.captains.length),o=state.roundOrders[r];if(o)$('modeInfo').textContent=`매 라운드 랜덤 · ${r+1}라운드 순서: `+o.map(i=>state.captains[i]).join(' → ')}
   if(t<0){show('result');renderResult();return}
   show('draft');
+  renderConcepts();
   const st=$('status'); const mine=canPickFor(t)&&me!=='';
   st.className='status'+(mine?' my':'');
   const n=state.captains.length;
   st.textContent=(mine?'🟢 내 차례! ':'')+`${Math.floor(state.picks.length/n)+1}라운드 · ${state.captains[t]} 팀장 선택 중`;
-  $('teams').innerHTML=state.captains.map((c,i)=>`<div class="team ${i===t?'turn':''}" data-team="${i}">
+  $('teams').innerHTML=state.captains.map((c,i)=>`<div class="team ${i===t?'turn':''}" data-team="${i}" style="${clubOf(i)?`border-top:6px solid ${clubOf(i)[1]==='#ffffff'?(clubOf(i)[2]):clubOf(i)[1]}`:''}">
     <h3><span>${esc(c)} <span class="on">${state.online&&state.online[i]?'●':''}</span></span>${i===t?'<span class="badge">차례</span>':''}</h3>
     <div class="muted">${state.teams[i].length+1}명</div>
     <div class="chip cap">👑 ${esc(c)}</div>
@@ -631,7 +632,9 @@ function setConcept(c,v){
 function sendConcept(c,v){
   if(isHost){const e=setConcept(c,v);if(e)toast(e);broadcast()} else hostConn.send({t:'concept',c,v});
 }
+let conceptSig='';
 function renderConcepts(){
+  const sig=JSON.stringify([state.concepts||{},me,isHost,leagueUI,state.captains]); if(sig===conceptSig) return; conceptSig=sig;
   const used=state.concepts||{};
   $('conceptRows').innerHTML=state.captains.map((c,i)=>{
     const cl=clubOf(i), can=canPickFor(i), lg=leagueUI[i]||(cl&&cl.league)||'K League', clubs=(LEAGUES.find(x=>x[0]===lg)||LEAGUES[0])[1];
@@ -650,7 +653,6 @@ function resultText(){
   return `⚽ 풋살 팀 구성 (${dateStr()})\n\n`+state.captains.map((c,i)=>`[${c} 팀]\n👑 ${c}\n`+sorted(i).join('\n')).join('\n\n');
 }
 function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&document.fonts.ready.then(()=>renderResult());}
-  renderConcepts();
   $('resultText').value=resultText();
   // 매치데이 포스터 스타일 (1080px 폭, 인스타 비율에 가깝게)
   const cv=$('resultCanvas'), n=state.captains.length, cols=n<=3?n:(n===4?2:3), rows=Math.ceil(n/cols);
