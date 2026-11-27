@@ -91,7 +91,9 @@ body>.wrap{padding-bottom:84px}
 .crow{display:flex;gap:8px;align-items:center;margin:6px 0}
 .crow .nm{flex:0 0 96px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crow .sw{flex:0 0 28px;height:28px;border-radius:8px;border:1px solid var(--line)}
-.crow select{flex:1}
+.crow select{flex:1;min-width:0}
+.crow select.lg{flex:0 0 112px}
+@media (max-width:600px){.crow{flex-wrap:wrap}.crow select.lg{flex:1 1 40%}.crow select.cl{flex:1 1 100%}}
 #resultCanvas{max-width:100%;border-radius:12px;display:block;margin:10px auto}
 </style>
 </head>
@@ -194,7 +196,7 @@ body>.wrap{padding-bottom:84px}
   <section id="result" class="hidden">
     <div class="card">
       <h2>🎉 팀 구성 완료</h2>
-      <div id="conceptBox"><label style="margin-top:0">팀 컨셉 (K리그 구단) — 팀장이 자기 팀 컨셉을 고르세요</label><div id="conceptRows"></div></div>
+      <div id="conceptBox"><label style="margin-top:0">팀 컨셉 — 팀장이 리그와 구단을 골라 자기 팀 컨셉을 정하세요</label><div id="conceptRows"></div></div>
       <canvas id="resultCanvas"></canvas>
       <div class="row" style="margin-top:10px">
         <button id="btnPng">🖼 이미지 저장</button>
@@ -575,7 +577,51 @@ const CLUBS=[
  ['충북청주FC','#13284f','#d6001c'],['파주 프런티어 FC','#1e63d6','#f06292'],['포항 스틸러스','#d7141a','#111111'],['FC서울','#c8102e','#111111','#c9a24b'],
  ['화성FC','#f26b21','#1a1a1a']
 ].sort((a,b)=>a[0].localeCompare(b[0],'ko'));
-const clubOf=i=>CLUBS.find(c=>c[0]===(state.concepts||{})[i]);
+// 해외 리그 (1부, 2026-27 시즌) — 전통 클럽 컬러 기준 근사값
+/*LEAGUE_DATA_START*/
+const FOREIGN={
+'EPL':[
+['노팅엄 포리스트','#dd0000','#ffffff'],['뉴캐슬 유나이티드','#241f20','#ffffff'],['리버풀','#c8102e','#ffffff'],['리즈 유나이티드','#ffffff','#1d428a','#ffcd00'],
+['맨체스터 시티','#6cabdd','#ffffff'],['맨체스터 유나이티드','#da291c','#ffffff'],['본머스','#da291c','#000000'],['브라이턴','#0057b8','#ffffff'],
+['브렌트퍼드','#e30613','#ffffff'],['선덜랜드','#eb172b','#ffffff'],['아스널','#ef0107','#ffffff'],['애스턴 빌라','#670e36','#95bfe5'],
+['에버턴','#003399','#ffffff'],['입스위치 타운','#3a64a3','#ffffff'],['첼시','#034694','#ffffff'],['코번트리 시티','#59cbe8','#ffffff'],
+['크리스털 팰리스','#1b458f','#c4122e'],['토트넘 홋스퍼','#ffffff','#132257'],['풀럼','#ffffff','#000000'],['헐 시티','#f5a12d','#000000']],
+'LaLiga':[
+['데포르티보 라코루냐','#005ba6','#ffffff'],['라싱 산탄데르','#ffffff','#007a3d'],['라요 바예카노','#ffffff','#e53027'],['레반테','#b4053f','#004d98'],
+['레알 마드리드','#ffffff','#febe10'],['레알 베티스','#00954c','#ffffff'],['레알 소시에다드','#0067b1','#ffffff'],['말라가','#1e6fb8','#ffffff'],
+['바르셀로나','#a50044','#004d98'],['발렌시아','#ffffff','#000000'],['비야레알','#fde100','#005187'],['세비야','#ffffff','#d71920'],
+['셀타 비고','#8ac3ee','#ffffff'],['아틀레티코 마드리드','#cb3524','#ffffff','#272e61'],['아틀레틱 빌바오','#ee2523','#ffffff'],['알라베스','#1a4b9c','#ffffff'],
+['에스파뇰','#007fc8','#ffffff'],['엘체','#ffffff','#05642c'],['오사수나','#d91a21','#0a346f'],['헤타페','#005999','#ffffff']],
+'Serie A':[
+['AC 밀란','#fb090b','#000000'],['AS 로마','#8e1f2f','#f0bc42'],['나폴리','#12a0d7','#ffffff'],['라치오','#87d8f7','#ffffff'],
+['레체','#ffe500','#e30613'],['몬차','#e2001a','#ffffff'],['베네치아','#000000','#f37021','#00704a'],['볼로냐','#a21c26','#1a2f48'],
+['사수올로','#00a752','#000000'],['아탈란타','#1e71b8','#000000'],['우디네세','#000000','#ffffff'],['유벤투스','#000000','#ffffff'],
+['인테르','#0068a8','#000000'],['제노아','#a31d2e','#002d62'],['칼리아리','#a50034','#002350'],['코모','#1d3d8f','#ffffff'],
+['토리노','#8a1e03','#ffffff'],['파르마','#ffffff','#000000'],['프로시노네','#ffe100','#0047ab'],['피오렌티나','#4b2e83','#ffffff']],
+'Bundesliga':[
+['도르트문트','#fde100','#000000'],['라이프치히','#ffffff','#dd0741'],['레버쿠젠','#e32221','#000000'],['마인츠','#c3141e','#ffffff'],
+['묀헨글라트바흐','#ffffff','#000000','#00a651'],['바이에른 뮌헨','#dc052d','#ffffff'],['베르더 브레멘','#1d9053','#ffffff'],['샬케 04','#004d9d','#ffffff'],
+['슈투트가르트','#ffffff','#e32219'],['아우크스부르크','#ba3733','#46714d','#ffffff'],['엘버스베르크','#000000','#ffffff'],['우니온 베를린','#eb1923','#ffffff'],
+['쾰른','#ed1c24','#ffffff'],['파더보른','#005ca9','#000000'],['프라이부르크','#e2001a','#000000'],['프랑크푸르트','#e1000f','#000000'],
+['함부르크','#ffffff','#005ca9'],['호펜하임','#1c63b7','#ffffff']],
+'Eredivisie':[
+['고어헤드 이글스','#c8102e','#ffcc00'],['NEC 네이메헌','#e2001a','#00843d','#000000'],['ADO 덴하흐','#00813f','#ffd700'],['빌럼 II','#e30613','#ffffff','#003da5'],
+['스파르타 로테르담','#e2001a','#ffffff'],['아약스','#d2122e','#ffffff'],['AZ 알크마르','#e30613','#ffffff'],['PSV 에인트호번','#ed1c24','#ffffff'],
+['엑셀시오르','#e2001a','#000000'],['위트레흐트','#e30613','#ffffff'],['PEC 즈볼러','#0057b8','#ffffff'],['SC 캄뷔르','#ffd700','#0057a8'],
+['텔스타르','#ffffff','#e30613'],['트벤테','#e2001a','#ffffff'],['페예노르트','#e3000b','#ffffff'],['포르투나 시타르트','#fcd100','#00843d'],
+['헤이렌베인','#0057b8','#ffffff'],['흐로닝언','#00a650','#ffffff']],
+'Süper Lig':[
+['가지안테프','#e30a17','#000000'],['갈라타사라이','#a90432','#fdb912'],['겐츨레르비를리이','#e30a17','#000000'],['괴즈테페','#ffd700','#e30a17'],
+['리제스포르','#00843d','#0057a8'],['바샥셰히르','#f26522','#1b2a5c'],['베식타스','#000000','#ffffff'],['삼순스포르','#e30a17','#ffffff'],
+['아메드','#00843d','#e30a17'],['알라니아스포르','#f47b20','#008d4f'],['에르주룸스포르','#0057a8','#ffffff'],['에윕스포르','#5c2d91','#ffd200'],
+['초룸','#e30a17','#000000'],['카슴파샤','#1b2a5c','#ffffff'],['코니아스포르','#00843d','#ffffff'],['코자엘리스포르','#00843d','#000000'],
+['트라브존스포르','#7a1e3a','#5bc2e7'],['페네르바흐체','#002d72','#ffed00']]
+};
+/*LEAGUE_DATA_END*/
+const LEAGUES=[['K리그',CLUBS],...Object.entries(FOREIGN).map(([k,v])=>[k,v.slice().sort((a,b)=>a[0].localeCompare(b[0],'ko'))])];
+const ALL_CLUBS=LEAGUES.flatMap(([l,cs])=>cs.map(c=>Object.assign(c.slice(),{league:l})));
+const clubOf=i=>ALL_CLUBS.find(c=>c[0]===(state.concepts||{})[i]);
+const leagueUI={}; // 팀장별로 현재 펼쳐 본 리그 (로컬 UI 상태)
 const isLight=h=>{const v=parseInt(h.slice(1),16);return ((v>>16)*299+((v>>8)&255)*587+(v&255)*114)/1000>165};
 function setConcept(c,v){
   state.concepts=state.concepts||{};
@@ -588,10 +634,12 @@ function sendConcept(c,v){
 function renderConcepts(){
   const used=state.concepts||{};
   $('conceptRows').innerHTML=state.captains.map((c,i)=>{
-    const cl=clubOf(i), can=canPickFor(i);
+    const cl=clubOf(i), can=canPickFor(i), lg=leagueUI[i]||(cl&&cl.league)||'K리그', clubs=(LEAGUES.find(x=>x[0]===lg)||LEAGUES[0])[1];
     return `<div class="crow"><span class="nm">${esc(c)}</span><span class="sw" style="background:${cl?`linear-gradient(135deg,${cl[1]} 55%,${cl[2]} 55% ${cl[3]?'75%,'+cl[3]+' 75%':''})`:'#f3f5fa'}"></span>
-      <select data-c="${i}" ${can?'':'disabled'}><option value="">기본 (블루·레드)</option>${CLUBS.map(k=>{const t=Object.entries(used).some(([x,v])=>v===k[0]&&+x!==i);return `<option value="${esc(k[0])}" ${used[i]===k[0]?'selected':''} ${t?'disabled':''}>${esc(k[0])}${t?' (선택됨)':''}</option>`}).join('')}</select></div>`}).join('');
-  $('conceptRows').querySelectorAll('select').forEach(sel=>sel.onchange=()=>sendConcept(+sel.dataset.c,sel.value));
+      <select class="lg" data-c="${i}" ${can?'':'disabled'}>${LEAGUES.map(([l])=>`<option ${l===lg?'selected':''}>${esc(l)}</option>`).join('')}</select>
+      <select class="cl" data-c="${i}" ${can?'':'disabled'}><option value="">${cl&&cl.league!==lg?esc(cl[0])+' (선택됨)':'기본 (블루·레드)'}</option>${clubs.map(k=>{const t=Object.entries(used).some(([x,v])=>v===k[0]&&+x!==i);return `<option value="${esc(k[0])}" ${used[i]===k[0]?'selected':''} ${t?'disabled':''}>${esc(k[0])}${t?' (선택됨)':''}</option>`}).join('')}</select></div>`}).join('');
+  $('conceptRows').querySelectorAll('select.lg').forEach(sel=>sel.onchange=()=>{leagueUI[+sel.dataset.c]=sel.value;renderConcepts()});
+  $('conceptRows').querySelectorAll('select.cl').forEach(sel=>sel.onchange=()=>{if(sel.value||!clubOf(+sel.dataset.c)||clubOf(+sel.dataset.c).league===(leagueUI[+sel.dataset.c]||clubOf(+sel.dataset.c).league))sendConcept(+sel.dataset.c,sel.value)});
 }
 
 // ---------- result ----------
