@@ -133,12 +133,11 @@ body.picking .wrap{padding-bottom:90px}
       <details class="help"><summary>❓ 카톡 투표 캡처 방법</summary>
         <ol>
           <li>카톡 투표 메시지 → <b>투표 현황</b> → <b>항목별</b> 탭을 엽니다.</li>
-          <li><b>갤럭시</b>: 캡처(전원+볼륨↓) 후 하단 툴바의 <b>스크롤 캡처(↓↓ 아이콘)</b>를 눌러 <b>참석·늦참</b> 목록 끝까지 내려 한 장으로 저장합니다.</li>
+          <li><b>갤럭시</b>: 캡처(전원+볼륨↓) 후 하단 툴바의 <b>스크롤 캡처(↓↓ 아이콘)</b>를 눌러 명단 끝까지 내려 한 장으로 저장합니다.</li>
           <li><b>아이폰</b>: 카톡 화면은 '전체 페이지' 캡처가 지원되지 않아요. 화면을 조금씩 내리며 <b>여러 장</b> 캡처한 뒤, 업로드할 때 <b>한꺼번에 선택</b>하세요. 겹치는 이름은 자동으로 합쳐집니다.</li>
           <li><b>📷 캡처 파일 업로드</b>로 올리거나, 이미지를 복사해 <b>📋 붙여넣기</b> 하세요.</li>
         </ol>
         <ul>
-          <li><b>참석</b>·<b>늦참</b> 섹션의 이름만 추출하고 불참·카풀지원 등은 제외합니다. 섹션 제목(참석/불참…)이 캡처에 보이도록 해주세요.</li>
           <li>명단이 <span class="fmt">이름/정보1/정보2</span> 형식이어도 앞의 이름만 사용합니다.</li>
           <li>인식 오류가 있을 수 있으니 추출 후 인원수와 이름을 꼭 확인하세요.</li>
         </ul>
@@ -253,14 +252,15 @@ document.addEventListener('paste',e=>{
 });
 // 두 번 인식한 결과 병합: 같은 년도/동 + 같은 글자수 + 한 글자만 다르면 같은 사람(오인식)으로 보고 하나만 남김
 function mergeOcr(list){
-  const cnt={}; list.forEach(e=>cnt[e.n]=(cnt[e.n]||0)+1);
+  const cnt={}, runs={}; list.forEach(e=>{cnt[e.n]=(cnt[e.n]||0)+1;(runs[e.n]=runs[e.n]||new Set()).add((e.f||0)+'-'+e.pass)});
   const diff1=(a,b)=>a.length===b.length&&[...a].filter((c,i)=>c!==b[i]).length===1;
   const out=[];
   for(const e of list){
     if(out.some(o=>o.n===e.n)) continue;
-    const j=out.findIndex(o=>e.k&&o.k===e.k&&diff1(o.n,e.n));
+    // 년도/동 같고 한 글자 차이 → 오인식. 정보 없는 단순 명단은 '한 번의 인식 안에서 함께 나온 적 없는' 한 글자 차이만 오인식으로 봄
+    const j=out.findIndex(o=>diff1(o.n,e.n)&&(e.k?o.k===e.k:!o.k&&![...runs[o.n]].some(x=>runs[e.n].has(x))));
     if(j<0){out.push(e);continue}
-    if(cnt[e.n]>cnt[out[j].n]) out[j]=e; // 더 여러 번 나온 이름을 채택
+    if(cnt[e.n]>cnt[out[j].n]||(cnt[e.n]===cnt[out[j].n]&&e.pass>out[j].pass)) out[j]=e; // 더 여러 번 나온 이름, 같으면 보정본(확대) 결과 채택
   }
   return out.map(e=>e.n);
 }
@@ -289,9 +289,9 @@ async function runOcr(files){
     for(const [k,f] of files.entries()){
       const c0={section:sec}, c1={section:sec};
       st.textContent=`이미지 ${k+1}/${files.length} 인식 중… (1/2)`;
-      names.push(...extractNames((await worker.recognize(f)).data.text,c0).map(e=>({...e,pass:0})));
+      names.push(...extractNames((await worker.recognize(f)).data.text,c0).map(e=>({...e,pass:0,f:k})));
       st.textContent=`이미지 ${k+1}/${files.length} 인식 중… (2/2)`;
-      names.push(...extractNames((await worker.recognize(await enhance(f))).data.text,c1).map(e=>({...e,pass:1})));
+      names.push(...extractNames((await worker.recognize(await enhance(f))).data.text,c1).map(e=>({...e,pass:1,f:k})));
       sec=c0.section||c1.section;
     }
     names=mergeOcr(names);
@@ -299,7 +299,7 @@ async function runOcr(files){
     const cur=parseNames($('cPlayers').value);
     const merged=[...new Set([...cur,...names])];
     $('cPlayers').value=merged.join('\n');updateCount();
-    st.textContent=`참석·늦참 ${[...new Set(names)].length}명 추출됨. 잘못 인식된 이름은 직접 수정해 주세요.`;
+    st.textContent=`${[...new Set(names)].length}명 추출됨. 잘못 인식된 이름은 직접 수정해 주세요.`;
   }catch(err){console.error(err);st.textContent='이미지 인식 실패: '+err}
 }
 const INCLUDE_SECTIONS=['참석','늦참'];
@@ -321,10 +321,11 @@ function extractNames(text,ctx={}){ // -> [{n:이름, k:'년도/동'}], ctx.sect
   return extractPlain(text).map(n=>({n,k:''}));
 }
 function extractPlain(text){
-  const stop=/(투표|참석|불참|미정|명|마감|복수|익명|선택|항목|결과|오후|오전|카카오|메시지|전체|보기|완료|진행|:|\d{1,2}:\d{2}|%)/;
+  const stop=/(투표|참석|불참|미정|\d+\s*명|마감|복수|익명|선택|항목|결과|오후|오전|카카오|메시지|전체|보기|완료|진행|:|\d{1,2}:\d{2}|%)/;
   return text.split('\n').flatMap(l=>l.split(/[,·•]/)).map(l=>l.split(/[\/／]/)[0]).map(l=>l.replace(/[^\p{L}\p{N} ]/gu,'').trim())
-    .filter(l=>l && l.length>=2 && l.length<=10 && !stop.test(l) && !/^\d+$/.test(l))
-    .map(l=>l.replace(/\s+/g,''));
+    .filter(l=>l && !stop.test(l))
+    .map(l=>l.replace(/\s+/g,''))
+    .filter(l=>/^([가-힣]{2,6}|[A-Za-z]{3,15})$/.test(l)); // 완성형 한글 2~6자 또는 영문 3자 이상만 (오인식 잡음 제거)
 }
 
 // ---------- draft logic (host authoritative) ----------
