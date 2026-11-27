@@ -548,7 +548,7 @@ function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&doc
   let bg=g.createLinearGradient(0,0,W,H); bg.addColorStop(0,'#0a2a78'); bg.addColorStop(.55,NAVY); bg.addColorStop(1,'#04123a');
   g.fillStyle=bg; g.fillRect(0,0,W,H);
   // diagonal stripes (blue / white / red)
-  g.save(); g.translate(W*.62,0); g.transform(1,0,-.42,1,0,0);
+  g.save(); g.translate(W*.80,0); g.transform(1,0,-.42,1,0,0);
   [[0,150,'#1f56c9',.55],[170,26,'#ffffff',.95],[214,58,RED,.95],[290,14,'#ffffff',.5]].forEach(([x,w,c,o])=>{g.globalAlpha=o;g.fillStyle=c;g.fillRect(x,0,w,H*.42)});
   g.restore(); g.globalAlpha=1;
   // subtle grid lines
@@ -560,9 +560,12 @@ function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&doc
   g.fillStyle=RED; g.fillRect(pad,128,64,8);
   g.font=`italic 900 132px ${F}`; g.fillStyle='#fff'; g.fillText('MATCH',pad-6,262);
   g.fillText('DAY',pad-6,380);
-  g.font=`800 40px ${F}`; g.textAlign='right';
-  g.fillText(`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`,W-pad,330);
-  g.font=`600 26px ${F}`; g.fillStyle='#c7d4f0'; g.fillText(`${wd}요일 · ${n}팀`,W-pad,374);
+  // 날짜는 DAY 오른쪽에 배치 (사선 띠와 겹치지 않도록)
+  g.font=`italic 900 132px ${F}`; const dx=pad-6+g.measureText('DAY').width+36;
+  g.textAlign='left'; g.fillStyle=RED; g.fillRect(dx,286,6,94);
+  g.fillStyle='#fff'; g.font=`800 40px ${F}`;
+  g.fillText(`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`,dx+22,330);
+  g.font=`600 26px ${F}`; g.fillStyle='#c7d4f0'; g.fillText(`${wd}요일 · ${n}팀`,dx+22,374);
   // team cards
   const TC=[BLUE,RED,'#ffffff','#1f7ae0','#9b1117','#0e7490','#b45309','#334155'];
   state.captains.forEach((c,i)=>{
@@ -592,7 +595,7 @@ function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&doc
   });
   // footer
   g.fillStyle=RED; g.fillRect(0,H-12,W,12); g.fillStyle='#fff'; g.fillRect(0,H-18,W,4);
-  g.textAlign='center'; g.fillStyle='#9fb6ef'; g.font=`700 22px ${F}`; g.fillText('LET’S PLAY TOGETHER  ·  FUTSAL DRAFT',W/2,H-58);
+  g.textAlign='center'; g.fillStyle='#9fb6ef'; g.font=`700 22px ${F}`; g.fillText('WE ARE TRICOLOR  ·  BLUE WINGS SINCE 1995',W/2,H-58);
 }
 function fit(g,t,max,size,F){while(size>18){g.font=`900 ${size}px ${F}`;if(g.measureText(t).width<=max)break;size-=2}return size}
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
