@@ -83,6 +83,10 @@ body.picking .wrap{padding-bottom:90px}
   #chatForm input{font-size:16px}
   body.chatopen{overflow:hidden}
 }
+.help{margin-top:10px;background:#f3f6fd;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:14px;line-height:1.6}
+.help summary{cursor:pointer;font-weight:700;color:var(--blue)}
+.help ol,.help ul{padding-left:20px;margin:8px 0}
+.help code{background:#e8eefb;border-radius:4px;padding:1px 5px}
 #resultCanvas{max-width:100%;border-radius:12px;display:block;margin:10px auto}
 </style>
 </head>
@@ -125,6 +129,19 @@ body.picking .wrap{padding-bottom:90px}
       </div>
       <input id="ocrFile" type="file" accept="image/*" multiple class="hidden">
       <div id="ocrStatus" class="muted" style="margin-top:6px">이 화면에서 캡처 이미지를 복사한 뒤 Ctrl+V(모바일은 버튼)로 바로 붙여넣을 수 있어요.</div>
+      <details class="help"><summary>❓ 카톡 투표 캡처 방법</summary>
+        <ol>
+          <li>카톡 투표 메시지 → <b>투표 현황</b> → <b>항목별</b> 탭을 엽니다.</li>
+          <li><b>갤럭시</b>: 캡처(전원+볼륨↓) 후 하단 툴바의 <b>스크롤 캡처(↓↓ 아이콘)</b>를 눌러 <b>참석·늦참</b> 목록 끝까지 내려 한 장으로 저장합니다.</li>
+          <li><b>아이폰</b>: 카톡 화면은 '전체 페이지' 캡처가 지원되지 않아요. 화면을 조금씩 내리며 <b>여러 장</b> 캡처한 뒤, 업로드할 때 <b>한꺼번에 선택</b>하세요. 겹치는 이름은 자동으로 합쳐집니다.</li>
+          <li><b>📷 캡처 파일 업로드</b>로 올리거나, 이미지를 복사해 <b>📋 붙여넣기</b> 하세요.</li>
+        </ol>
+        <ul>
+          <li><b>참석</b>·<b>늦참</b> 섹션의 이름만 추출하고 불참·카풀지원 등은 제외합니다. 섹션 제목(참석/불참…)이 캡처에 보이도록 해주세요.</li>
+          <li>명단은 <code>이름/출생년도/동</code> 형식이어도 이름만 사용합니다.</li>
+          <li>인식 오류가 있을 수 있으니 추출 후 인원수와 이름을 꼭 확인하세요.</li>
+        </ul>
+      </details>
       <div style="margin-top:14px"><button id="btnCreate" style="width:100%">세션 시작</button></div>
       <p class="muted">진행자 기기가 세션 서버 역할을 합니다. 드래프트가 끝날 때까지 이 화면을 닫지 마세요. (새로고침 시 같은 코드로 자동 복구)</p>
     </div>
@@ -259,11 +276,16 @@ async function runOcr(files){
     const worker=await Tesseract.createWorker(['kor','eng'],1,{logger:m=>{if(m.status==='recognizing text')st.textContent=`인식 중… ${Math.round(m.progress*100)}%`}});
     let names=[];
     // 작은 글씨 오인식 보정: 원본 + 2배 확대·흑백·대비 보정본을 각각 인식해 합침
+    // 여러 장(아이폰 등)은 파일명(촬영 시각) 순으로 처리하고, 앞 장의 마지막 섹션을 다음 장으로 이어감
+    if(files.every(f=>f.name)) files=files.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+    let sec=null;
     for(const [k,f] of files.entries()){
+      const c0={section:sec}, c1={section:sec};
       st.textContent=`이미지 ${k+1}/${files.length} 인식 중… (1/2)`;
-      names.push(...extractNames((await worker.recognize(f)).data.text).map(e=>({...e,pass:0})));
+      names.push(...extractNames((await worker.recognize(f)).data.text,c0).map(e=>({...e,pass:0})));
       st.textContent=`이미지 ${k+1}/${files.length} 인식 중… (2/2)`;
-      names.push(...extractNames((await worker.recognize(await enhance(f))).data.text).map(e=>({...e,pass:1})));
+      names.push(...extractNames((await worker.recognize(await enhance(f))).data.text,c1).map(e=>({...e,pass:1})));
+      sec=c0.section||c1.section;
     }
     names=mergeOcr(names);
     await worker.terminate();
@@ -274,18 +296,19 @@ async function runOcr(files){
   }catch(err){console.error(err);st.textContent='이미지 인식 실패: '+err}
 }
 const INCLUDE_SECTIONS=['참석','늦참'];
-function extractNames(text){ // -> [{n:이름, k:'년도/동'}]
+function extractNames(text,ctx={}){ // -> [{n:이름, k:'년도/동'}], ctx.section: 이전 캡처에서 이어지는 섹션
   // 카톡 투표 현황: 섹션(참석/불참/늦참/카풀지원…)별로 "이름/년도/동" 이 두 열로 나옴
   // → 참석·늦참 섹션의 이름만 추출. 섹션 제목을 못 찾으면 전체 추출.
   // 이름 뒤 구분자(/)가 1·l·|·공백으로 오인식되거나 '동'이 없는 경우(오승웅/83/109)도 허용
   const NAME=/([가-힣]{2,5}|[A-Za-z]{2,12})\s*(?:[\/／1lI|]?\s*\(?(\d{2})\s*[\/／1lI|]\s*(\d{2,3})|[\/／]\s*\(?\d)/g;
-  let section=null, found=false; const picked=[], all=[];
+  let section=ctx.section||null, found=!!section; const picked=[], all=[];
   for(const raw of text.replace(/[|｜]/g,'/').split('\n')){
     const names=[...raw.matchAll(NAME)].map(m=>({n:m[1],k:m[2]?m[2]+'/'+m[3]:''}));
     if(names.length){all.push(...names); if(section&&INCLUDE_SECTIONS.includes(section)) picked.push(...names); continue}
     const h=raw.replace(/[^가-힣]/g,'');
     if(h&&h.length<=6&&!/투표|현황|항목|멤버|종료|선택|사람|없어/.test(h)){ section=h; if(INCLUDE_SECTIONS.some(k=>h.startsWith(k))){section=INCLUDE_SECTIONS.find(k=>h.startsWith(k));found=true} }
   }
+  ctx.section=section;
   if(found) return picked;
   if(all.length) return all;
   return extractPlain(text).map(n=>({n,k:''}));
@@ -595,7 +618,7 @@ function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&doc
   });
   // footer
   g.fillStyle=RED; g.fillRect(0,H-12,W,12); g.fillStyle='#fff'; g.fillRect(0,H-18,W,4);
-  g.textAlign='center'; g.fillStyle='#9fb6ef'; g.font=`700 22px ${F}`; g.fillText('WE ARE TRICOLOR  ·  BLUE WINGS SINCE 1995',W/2,H-58);
+  g.textAlign='center'; g.fillStyle='#9fb6ef'; g.font=`700 22px ${F}`; g.fillText('SUWON BLUEWINGS  ·  OUR PRIDE',W/2,H-58);
 }
 function fit(g,t,max,size,F){while(size>18){g.font=`900 ${size}px ${F}`;if(g.measureText(t).width<=max)break;size-=2}return size}
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
