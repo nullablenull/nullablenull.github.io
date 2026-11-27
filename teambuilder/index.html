@@ -535,24 +535,66 @@ function resultText(){
 }
 function renderResult(){if(!renderResult.f){renderResult.f=1;document.fonts&&document.fonts.ready.then(()=>renderResult());}
   $('resultText').value=resultText();
-  const cv=$('resultCanvas'), n=state.captains.length, cols=Math.min(n,4), rows=Math.ceil(n/cols);
-  const maxLen=Math.max(...state.teams.map(t=>t.length))+1;
-  const colW=260, lineH=40, headH=70, boxH=headH+maxLen*lineH+20, W=cols*colW+(cols+1)*20, H=120+rows*(boxH+20);
+  // 매치데이 포스터 스타일 (1080px 폭, 인스타 비율에 가깝게)
+  const cv=$('resultCanvas'), n=state.captains.length, cols=n<=3?n:(n===4?2:3), rows=Math.ceil(n/cols);
+  const W=1080, pad=56, gap=24, colW=(W-pad*2-gap*(cols-1))/cols;
+  const maxLen=Math.max(...state.teams.map(t=>t.length))+1, lineH=n<=3?58:52, cardHead=118, cardH=cardHead+maxLen*lineH+28;
+  const top=430, H=top+rows*cardH+(rows-1)*gap+150;
   const s=2; cv.width=W*s; cv.height=H*s; cv.style.width=Math.min(W,cv.parentElement.clientWidth)+'px';
   const g=cv.getContext('2d'); g.scale(s,s);
   const F='Pretendard,"Apple SD Gothic Neo","Malgun Gothic",sans-serif';
-  g.fillStyle='#f3f5fa';g.fillRect(0,0,W,H);g.fillStyle='#071f5c';g.fillRect(0,0,W,95);g.fillStyle='#d71920';g.fillRect(0,95,W,5);
-  g.fillStyle='#fff';g.font=`800 30px ${F}`;g.textAlign='center';g.fillText('⚽ 오늘의 풋살 팀',W/2,50);
-  g.fillStyle='#c7d4f0';g.font=`500 16px ${F}`;g.fillText(dateStr(),W/2,80);
+  const NAVY='#071f5c', BLUE='#0a3ca0', RED='#d71920';
+  // background
+  let bg=g.createLinearGradient(0,0,W,H); bg.addColorStop(0,'#0a2a78'); bg.addColorStop(.55,NAVY); bg.addColorStop(1,'#04123a');
+  g.fillStyle=bg; g.fillRect(0,0,W,H);
+  // diagonal stripes (blue / white / red)
+  g.save(); g.translate(W*.62,0); g.transform(1,0,-.42,1,0,0);
+  [[0,150,'#1f56c9',.55],[170,26,'#ffffff',.95],[214,58,RED,.95],[290,14,'#ffffff',.5]].forEach(([x,w,c,o])=>{g.globalAlpha=o;g.fillStyle=c;g.fillRect(x,0,w,H*.42)});
+  g.restore(); g.globalAlpha=1;
+  // subtle grid lines
+  g.strokeStyle='#ffffff0d'; g.lineWidth=1; for(let y=0;y<H;y+=36){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke()}
+  // header text
+  const d=new Date(), wd='일월화수목금토'[d.getDay()];
+  g.textAlign='left'; g.fillStyle='#fff';
+  g.font=`700 26px ${F}`; g.fillStyle='#9fb6ef'; g.fillText('FUTSAL TEAM LINEUP',pad,110);
+  g.fillStyle=RED; g.fillRect(pad,128,64,8);
+  g.font=`italic 900 132px ${F}`; g.fillStyle='#fff'; g.fillText('MATCH',pad-6,262);
+  g.fillText('DAY',pad-6,380);
+  g.font=`800 40px ${F}`; g.textAlign='right';
+  g.fillText(`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`,W-pad,330);
+  g.font=`600 26px ${F}`; g.fillStyle='#c7d4f0'; g.fillText(`${wd}요일 · ${n}팀`,W-pad,374);
+  // team cards
+  const TC=[BLUE,RED,'#ffffff','#1f7ae0','#9b1117','#0e7490','#b45309','#334155'];
   state.captains.forEach((c,i)=>{
-    const x=20+(i%cols)*(colW+20), y=115+Math.floor(i/cols)*(boxH+20), col=COLORS[i%COLORS.length];
-    g.fillStyle='#ffffff';rr(g,x,y,colW,boxH,14);g.fill();
-    g.fillStyle=col;rr(g,x,y,colW,headH-10,14);g.fill();g.fillRect(x,y+30,colW,headH-40);
-    g.fillStyle='#fff';g.font=`800 22px ${F}`;g.textAlign='left';g.fillText(c+' 팀',x+16,y+38);
-    g.textAlign='left';g.font=`600 19px ${F}`;
-    [('👑 '+c),...sorted(i)].forEach((line,j)=>{g.fillStyle=j?'#0b1b3f':'#d71920';g.fillText(line,x+18,y+headH+24+j*lineH)});
+    const x=pad+(i%cols)*(colW+gap), y=top+Math.floor(i/cols)*(cardH+gap), col=TC[i%TC.length], light=col==='#ffffff';
+    g.fillStyle='#00000040'; rr(g,x+6,y+8,colW,cardH,18); g.fill();
+    g.fillStyle='#ffffff'; rr(g,x,y,colW,cardH,18); g.fill();
+    // card head
+    g.save(); rr(g,x,y,colW,cardH,18); g.clip();
+    g.fillStyle=light?NAVY:col; g.fillRect(x,y,colW,cardHead);
+    g.fillStyle=light?'#ffffff':RED; if(light) g.fillStyle=RED; g.fillRect(x,y+cardHead-6,colW,6);
+    g.globalAlpha=.18; g.fillStyle='#fff'; g.font=`italic 900 120px ${F}`; g.textAlign='right'; g.fillText(String(i+1).padStart(2,'0'),x+colW-10,y+cardHead-8); g.globalAlpha=1;
+    g.restore();
+    g.textAlign='left'; g.fillStyle='#ffffffcc'; g.font=`800 18px ${F}`; g.fillText('TEAM '+String.fromCharCode(65+i),x+24,y+42);
+    g.fillStyle='#fff'; g.font=`900 ${fit(g,c+' 팀',colW-48,38,F)}px ${F}`; g.fillText(c+' 팀',x+24,y+90);
+    // players
+    let yy=y+cardHead+lineH*.78;
+    g.font=`800 ${n<=3?28:25}px ${F}`;
+    // captain row
+    g.fillStyle=RED; rr(g,x+24,yy-24,34,30,7); g.fill();
+    g.fillStyle='#fff'; g.font=`900 18px ${F}`; g.textAlign='center'; g.fillText('C',x+41,yy-3);
+    g.textAlign='left'; g.fillStyle=NAVY; g.font=`900 ${n<=3?28:25}px ${F}`; g.fillText(c,x+70,yy);
+    sorted(i).forEach((p,j)=>{
+      yy+=lineH;
+      g.strokeStyle='#e3e8f2'; g.lineWidth=1; g.beginPath(); g.moveTo(x+24,yy-lineH*.62); g.lineTo(x+colW-24,yy-lineH*.62); g.stroke();
+      g.fillStyle='#0b1b3f'; g.font=`600 ${n<=3?27:24}px ${F}`; g.fillText(p,x+70,yy);
+    });
   });
+  // footer
+  g.fillStyle=RED; g.fillRect(0,H-12,W,12); g.fillStyle='#fff'; g.fillRect(0,H-18,W,4);
+  g.textAlign='center'; g.fillStyle='#9fb6ef'; g.font=`700 22px ${F}`; g.fillText('LET’S PLAY TOGETHER  ·  FUTSAL DRAFT',W/2,H-58);
 }
+function fit(g,t,max,size,F){while(size>18){g.font=`900 ${size}px ${F}`;if(g.measureText(t).width<=max)break;size-=2}return size}
 function rr(g,x,y,w,h,r){g.beginPath();g.moveTo(x+r,y);g.arcTo(x+w,y,x+w,y+h,r);g.arcTo(x+w,y+h,x,y+h,r);g.arcTo(x,y+h,x,y,r);g.arcTo(x,y,x+w,y,r);g.closePath()}
 function download(name,url){const a=document.createElement('a');a.href=url;a.download=name;a.click()}
 $('btnPng').onclick=()=>download(`futsal-${dateStr()}.png`,$('resultCanvas').toDataURL('image/png'));
